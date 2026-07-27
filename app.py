@@ -35,7 +35,7 @@ if not check_password():
 col1, col2 = st.columns([1, 5])
 with col1:
     # À remplacer par ton logo officiel
-    st.image(".streamlit/assets/logo_northsentinel_core", width=120)
+    st.image("assets/logo_northsentinel_core.png", width=120)
 with col2:
     st.markdown("<h1 style='color: #F5A623; margin-bottom: 0;'>NorthSentinel CORE</h1>", unsafe_allow_html=True)
     st.markdown("<p style='color: #AAAAAA; margin-top: 0;'>Cockpit de supervision — Signaux en temps réel</p>", unsafe_allow_html=True)
