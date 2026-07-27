@@ -71,7 +71,7 @@ st.divider()
 
 # --- BARRE LATÉRALE (PARAMÈTRES) ---
 with st.sidebar:
-    st.image("https://via.placeholder.com/200x60/0E1117/F5A623?text=NORTHSENTINEL", width=200)
+    st.image("assets/logo_northsentinel_core.png", width=80)
     st.markdown("---")
     st.markdown("### ⚙️ Paramètres de risque")
     st.metric("Capital", "1 000 000 $")
