@@ -1,7 +1,7 @@
 import streamlit as st
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 import pandas as pd
 import pytz
 
@@ -69,9 +69,68 @@ with col2:
 
 st.divider()
 
-# --- BARRE LATÉRALE (PARAMÈTRES) ---
+# --- LECTURE DES SIGNAUX (défini avant la fonction) ---
+SIGNAL_FILE = "core_signals_today.json"
+
+# --- FONCTION DE STATUT DYNAMIQUE ---
+def get_system_status():
+    now = datetime.now(MONTREAL_TZ)
+    
+    # Horaires des runs (heure locale)
+    run_times = [
+        now.replace(hour=10, minute=0, second=0, microsecond=0),
+        now.replace(hour=10, minute=30, second=0, microsecond=0),
+        now.replace(hour=14, minute=55, second=0, microsecond=0),
+        now.replace(hour=15, minute=55, second=0, microsecond=0)
+    ]
+    
+    # Trouver le prochain run
+    next_run = None
+    for rt in run_times:
+        if rt > now:
+            next_run = rt
+            break
+    if next_run is None:
+        next_run = run_times[0] + timedelta(days=1)
+    
+    # Lire le dernier signal
+    last_signal_time = None
+    if os.path.exists(SIGNAL_FILE):
+        try:
+            with open(SIGNAL_FILE, 'r') as f:
+                signals = json.load(f)
+                if signals:
+                    last_ts = signals[-1].get('timestamp')
+                    if last_ts:
+                        last_signal_time = datetime.strptime(last_ts, '%Y-%m-%d %H:%M')
+                        last_signal_time = MONTREAL_TZ.localize(last_signal_time)
+        except:
+            pass
+    
+    # Déterminer le statut
+    if last_signal_time:
+        delta_minutes = (now - last_signal_time).total_seconds() / 60
+        if delta_minutes < 15:
+            return "🟢", "Run en cours"
+        elif delta_minutes < 120:
+            minutes = int(delta_minutes)
+            return "🟡", f"Dernier run il y a {minutes} min"
+        else:
+            delta_next = next_run - now
+            hours = delta_next.seconds // 3600
+            minutes = (delta_next.seconds % 3600) // 60
+            return "🔵", f"Prochain run dans {hours}h {minutes:02d}min"
+    else:
+        delta_next = next_run - now
+        hours = delta_next.seconds // 3600
+        minutes = (delta_next.seconds % 3600) // 60
+        return "🔴", f"Aucun signal - prochain run dans {hours}h {minutes:02d}min"
+
+# --- BARRE LATÉRALE (PARAMÈTRES + STATUT) ---
 with st.sidebar:
-    st.image("assets/logo_northsentinel_core.png", width=80)
+    status_emoji, status_msg = get_system_status()
+    st.markdown(f"### {status_emoji} Statut")
+    st.markdown(f"**{status_msg}**")
     st.markdown("---")
     st.markdown("### ⚙️ Paramètres de risque")
     st.metric("Capital", "1 000 000 $")
@@ -81,8 +140,7 @@ with st.sidebar:
     st.markdown("---")
     st.caption(f"Session ouverte – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- LECTURE DES SIGNAUX ---
-SIGNAL_FILE = "core_signals_today.json"
+# --- LECTURE DES SIGNAUX (pour l'affichage principal) ---
 signals = []
 if os.path.exists(SIGNAL_FILE):
     with open(SIGNAL_FILE, "r") as f:
