@@ -1,0 +1,15 @@
+# Fichiers de secrets (ne jamais les commiter)
+.streamlit/secrets.toml
+
+# Fichiers Python générés
+__pycache__/
+*.pyc
+*.pyo
+
+# Environnement virtuel
+venv/
+.env
+
+# Dossiers système
+.DS_Store
+Thumbs.db
