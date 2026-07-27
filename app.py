@@ -3,6 +3,10 @@ import json
 import os
 from datetime import datetime
 import pandas as pd
+import pytz
+
+# --- FUSEAU HORAIRE DE MONTRÉAL (AMERICA/TORONTO) ---
+MONTREAL_TZ = pytz.timezone('America/Toronto')
 
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(
@@ -58,7 +62,6 @@ if not check_password():
 # --- HEADER AVEC LOGO ---
 col1, col2 = st.columns([1, 5])
 with col1:
-    # À remplacer par ton logo officiel
     st.image("assets/logo_northsentinel_core.png", width=120)
 with col2:
     st.markdown("<h1 style='color: #F5A623; margin-bottom: 0;'>NorthSentinel CORE</h1>", unsafe_allow_html=True)
@@ -76,7 +79,7 @@ with st.sidebar:
     st.metric("SL max", "2.5 %")
     st.metric("R/R min", "1:2")
     st.markdown("---")
-    st.caption(f"Session ouverte – {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    st.caption(f"Session ouverte – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # --- LECTURE DES SIGNAUX ---
 SIGNAL_FILE = "core_signals_today.json"
@@ -90,9 +93,8 @@ if os.path.exists(SIGNAL_FILE):
 else:
     st.warning("⚠️ Aucun fichier de signaux trouvé.")
 
-# --- MÉTRIQUES PRINCIPALES (comme sur Netlify) ---
+# --- MÉTRIQUES PRINCIPALES ---
 if signals:
-    # On prend les 10 derniers
     signals = signals[-10:][::-1]
     total = len(signals)
     avg_score = sum(s.get("score", 0) for s in signals) / total if total > 0 else 0
@@ -111,7 +113,6 @@ st.divider()
 st.markdown("### 📋 Derniers setups")
 
 if signals:
-    # Construction du tableau
     data = []
     for s in signals:
         data.append({
@@ -126,7 +127,6 @@ if signals:
         })
     df = pd.DataFrame(data)
     
-    # Coloration conditionnelle des scores
     def color_score(val):
         if val >= 7:
             return 'background-color: #1a5e1a; color: white;'
@@ -138,7 +138,6 @@ if signals:
     styled_df = df.style.applymap(color_score, subset=['Score'])
     st.dataframe(styled_df, use_container_width=True, height=400)
 
-    # Détail du dernier signal
     st.markdown("---")
     st.markdown("### 🔍 Détail du dernier signal")
     last = signals[0]
