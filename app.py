@@ -35,6 +35,11 @@ st.markdown(
         .css-1v3fvcr h3 {
             font-size: 1rem !important;
         }
+        /* Met le texte de statut en italique et sans gras */
+        .status-text {
+            font-style: italic !important;
+            font-weight: normal !important;
+        }
     </style>
     """,
     unsafe_allow_html=True
@@ -65,7 +70,7 @@ with col1:
     st.image("assets/logo_northsentinel_core.png", width=120)
 with col2:
     st.markdown("<h1 style='color: #F5A623; margin-bottom: 0;'>NorthSentinel CORE</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #AAAAAA; margin-top: 0;'>Cockpit de supervision — Signaux en temps réel</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #AAAAAA; margin-top: 0; font-size: 1.2rem;'>Cockpit de supervision — Signaux en temps réel</p>", unsafe_allow_html=True)
 
 st.divider()
 
@@ -130,7 +135,7 @@ def get_system_status():
 with st.sidebar:
     status_emoji, status_msg = get_system_status()
     st.markdown(f"### {status_emoji} Statut")
-    st.markdown(f"**{status_msg}**")
+    st.markdown(f'<p class="status-text">{status_msg}</p>', unsafe_allow_html=True)
     st.markdown("---")
     st.markdown("### ⚙️ Paramètres de risque")
     st.metric("Capital", "1 000 000 $")
