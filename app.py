@@ -8,6 +8,23 @@ import pytz
 # --- FUSEAU HORAIRE DE MONTRÉAL (AMERICA/TORONTO) ---
 MONTREAL_TZ = pytz.timezone('America/Toronto')
 
+# --- DÉFINITION DES FICHIERS (AVANT LA ROTATION) ---
+SIGNAL_FILE = "core_signals_today.json"
+LOG_FILE = "core.log"
+
+# --- ROTATION AUTOMATIQUE DU FICHIER DE LOG (1x/jour à minuit) ---
+if os.path.exists(LOG_FILE):
+    mtime = os.path.getmtime(LOG_FILE)
+    last_mod = datetime.fromtimestamp(mtime, MONTREAL_TZ)
+    now = datetime.now(MONTREAL_TZ)
+    today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if last_mod < today_midnight:
+        archive_name = f"core_log_archive_{last_mod.strftime('%Y%m%d_%H%M%S')}.log"
+        os.rename(LOG_FILE, archive_name)
+        with open(LOG_FILE, 'w') as f:
+            pass
+        print(f"✅ Log archivé : {archive_name}")
+
 # --- CONFIGURATION DE LA PAGE ---
 st.set_page_config(
     page_title="NorthSentinel CORE",
@@ -65,14 +82,9 @@ with col1:
     st.image("assets/logo_northsentinel_core.png", width=120)
 with col2:
     st.markdown("<h1 style='color: #F5A623; margin-bottom: 0;'>NorthSentinel CORE</h1>", unsafe_allow_html=True)
-    # Police du sous-titre augmentée (1.2rem au lieu de la taille par défaut)
     st.markdown("<p style='color: #AAAAAA; margin-top: 0; font-size: 1.2rem;'>Cockpit de supervision — Signaux en temps réel</p>", unsafe_allow_html=True)
 
 st.divider()
-
-# --- LECTURE DES SIGNAUX (défini avant la fonction) ---
-SIGNAL_FILE = "core_signals_today.json"
-LOG_FILE = "core.log"  # Fichier où le script Core écrit ses logs (à configurer dans Core)
 
 # --- FONCTION DE STATUT DYNAMIQUE ---
 def get_system_status():
@@ -132,7 +144,6 @@ def get_system_status():
 with st.sidebar:
     status_emoji, status_msg = get_system_status()
     st.markdown(f"### {status_emoji} Statut")
-    # Affichage en italique, sans gras (l'astérisque simple = italique)
     st.markdown(f"*{status_msg}*")
     st.markdown("---")
     st.markdown("### ⚙️ Paramètres de risque")
@@ -221,14 +232,13 @@ else:
 
 st.divider()
 
-# --- SECTION LOGS (RÉINTÉGRÉE) ---
+# --- SECTION LOGS (avec rotation gérée en amont) ---
 st.markdown("### 📋 Logs des runs")
 
 if os.path.exists(LOG_FILE):
     try:
         with open(LOG_FILE, "r") as f:
             log_lines = f.readlines()
-            # On affiche les 50 dernières lignes
             if len(log_lines) > 50:
                 log_lines = log_lines[-50:]
             log_text = "".join(log_lines)
@@ -240,7 +250,7 @@ else:
     st.info("📭 Aucun log disponible pour le moment. Les logs apparaîtront après la première exécution du script Core.")
     st.caption("Astuce : redirige la sortie du script Core vers un fichier `core.log` pour voir les logs ici.")
 
-# --- PIED DE PAGE (police augmentée) ---
+# --- PIED DE PAGE ---
 st.divider()
 st.markdown(
     "<p style='text-align: center; color: #666; font-size: 0.9rem;'>NorthSentinel CORE – Cockpit v2.0 – © NorthSentinel Trading</p>",
