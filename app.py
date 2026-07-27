@@ -146,7 +146,7 @@ with st.sidebar:
     st.markdown(f"### {status_emoji} Statut")
     st.markdown(f"*{status_msg}*")
     st.markdown("---")
-    st.markdown("### ⚙️ Paramètres de risque")
+    st.markdown("<h3 style='color: #F5A623;'>⚙️ Paramètres de risque</h3>", unsafe_allow_html=True)
     st.metric("Capital", "1 000 000 $")
     # --- AJOUT : Exposition max / trade ---
     st.metric("Exposition max / trade", "100 000 $")
