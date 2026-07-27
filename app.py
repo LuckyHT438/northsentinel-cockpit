@@ -148,6 +148,8 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("### ⚙️ Paramètres de risque")
     st.metric("Capital", "1 000 000 $")
+    # --- AJOUT : Exposition max / trade ---
+    st.metric("Exposition max / trade", "100 000 $")
     st.metric("Risque / trade", "2 %")
     st.metric("SL max", "2.5 %")
     st.metric("R/R min", "1:2")
@@ -232,7 +234,7 @@ else:
 
 st.divider()
 
-# --- SECTION LOGS (avec rotation gérée en amont) ---
+# --- SECTION LOGS ---
 st.markdown("### 📋 Logs des runs")
 
 if os.path.exists(LOG_FILE):
