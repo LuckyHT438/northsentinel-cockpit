@@ -35,11 +35,6 @@ st.markdown(
         .css-1v3fvcr h3 {
             font-size: 1rem !important;
         }
-        /* Met le texte de statut en italique et sans gras */
-        .status-text {
-            font-style: italic !important;
-            font-weight: normal !important;
-        }
     </style>
     """,
     unsafe_allow_html=True
@@ -70,12 +65,14 @@ with col1:
     st.image("assets/logo_northsentinel_core.png", width=120)
 with col2:
     st.markdown("<h1 style='color: #F5A623; margin-bottom: 0;'>NorthSentinel CORE</h1>", unsafe_allow_html=True)
+    # Police du sous-titre augmentée (1.2rem au lieu de la taille par défaut)
     st.markdown("<p style='color: #AAAAAA; margin-top: 0; font-size: 1.2rem;'>Cockpit de supervision — Signaux en temps réel</p>", unsafe_allow_html=True)
 
 st.divider()
 
 # --- LECTURE DES SIGNAUX (défini avant la fonction) ---
 SIGNAL_FILE = "core_signals_today.json"
+LOG_FILE = "core.log"  # Fichier où le script Core écrit ses logs (à configurer dans Core)
 
 # --- FONCTION DE STATUT DYNAMIQUE ---
 def get_system_status():
@@ -135,7 +132,8 @@ def get_system_status():
 with st.sidebar:
     status_emoji, status_msg = get_system_status()
     st.markdown(f"### {status_emoji} Statut")
-    st.markdown(f'<p class="status-text">{status_msg}</p>', unsafe_allow_html=True)
+    # Affichage en italique, sans gras (l'astérisque simple = italique)
+    st.markdown(f"*{status_msg}*")
     st.markdown("---")
     st.markdown("### ⚙️ Paramètres de risque")
     st.metric("Capital", "1 000 000 $")
@@ -221,9 +219,30 @@ if signals:
 else:
     st.info("En attente des premiers signaux...")
 
-# --- PIED DE PAGE ---
+st.divider()
+
+# --- SECTION LOGS (RÉINTÉGRÉE) ---
+st.markdown("### 📋 Logs des runs")
+
+if os.path.exists(LOG_FILE):
+    try:
+        with open(LOG_FILE, "r") as f:
+            log_lines = f.readlines()
+            # On affiche les 50 dernières lignes
+            if len(log_lines) > 50:
+                log_lines = log_lines[-50:]
+            log_text = "".join(log_lines)
+            st.code(log_text, language="log", line_numbers=False)
+            st.caption(f"Affichage des {len(log_lines)} dernières lignes du fichier {LOG_FILE}")
+    except Exception as e:
+        st.error(f"Erreur lors de la lecture du fichier de log : {e}")
+else:
+    st.info("📭 Aucun log disponible pour le moment. Les logs apparaîtront après la première exécution du script Core.")
+    st.caption("Astuce : redirige la sortie du script Core vers un fichier `core.log` pour voir les logs ici.")
+
+# --- PIED DE PAGE (police augmentée) ---
 st.divider()
 st.markdown(
-    "<p style='text-align: center; color: #666; font-size: 0.8rem;'>NorthSentinel CORE – Cockpit v2.0 – © NorthSentinel Trading</p>",
+    "<p style='text-align: center; color: #666; font-size: 0.9rem;'>NorthSentinel CORE – Cockpit v2.0 – © NorthSentinel Trading</p>",
     unsafe_allow_html=True
 )
