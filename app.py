@@ -12,6 +12,30 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# --- CSS PERSONNALISÉ POUR LA SIDEBAR ---
+st.markdown(
+    """
+    <style>
+        /* Réduit la taille de la police dans toute la sidebar */
+        .css-1d391kg, .css-12oz5g7, .css-1v3fvcr, .css-1v0mbdj {
+            font-size: 0.85rem !important;
+        }
+        /* Réduit la taille des métriques */
+        [data-testid="stMetricValue"] {
+            font-size: 1.2rem !important;
+        }
+        [data-testid="stMetricLabel"] {
+            font-size: 0.8rem !important;
+        }
+        /* Réduit le titre de la sidebar */
+        .css-1v3fvcr h3 {
+            font-size: 1rem !important;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # --- AUTHENTIFICATION ---
 def check_password():
     if "authenticated" not in st.session_state:
