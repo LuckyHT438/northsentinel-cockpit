@@ -2,21 +2,22 @@ import streamlit as st
 import json
 import os
 from datetime import datetime
-import pytz
+import pandas as pd
 
 # --- CONFIGURATION DE LA PAGE ---
-st.set_page_config(page_title="NorthSentinel CORE", page_icon="📊", layout="wide")
+st.set_page_config(
+    page_title="NorthSentinel CORE",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # --- AUTHENTIFICATION ---
 def check_password():
-    """Return True if the user has entered the correct password."""
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
-
     if st.session_state.authenticated:
         return True
-
-    # Afficher le champ de mot de passe
     st.title("🔐 Accès restreint")
     password_input = st.text_input("Entrez le mot de passe", type="password")
     if st.button("Se connecter"):
@@ -30,36 +31,31 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- HEADER AVEC LOGO (PLACEHOLDER) ---
-# Remplacer ce bloc quand le logo sera disponible
-try:
+# --- HEADER AVEC LOGO ---
+col1, col2 = st.columns([1, 5])
+with col1:
+    # À remplacer par ton logo officiel
     st.image("assets/logo_northsentinel_core.png", width=120)
-except:
-    st.markdown("### 🏔️ NorthSentinel CORE — Cockpit")
+with col2:
+    st.markdown("<h1 style='color: #F5A623; margin-bottom: 0;'>NorthSentinel CORE</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #AAAAAA; margin-top: 0;'>Cockpit de supervision — Signaux en temps réel</p>", unsafe_allow_html=True)
 
-st.caption(f"Session ouverte – {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+st.divider()
 
-# --- PARAMÈTRES GLOBAUX (pour information) ---
-# On peut les récupérer plus tard depuis un fichier de config si besoin
-st.sidebar.title("⚙️ Paramètres")
-st.sidebar.markdown("**Capital** : 1 000 000 $")
-st.sidebar.markdown("**Risque/trade** : 2 %")
-st.sidebar.markdown("**SL max** : 2.5 %")
-st.sidebar.markdown("**R/R min** : 1:2")
+# --- BARRE LATÉRALE (PARAMÈTRES) ---
+with st.sidebar:
+    st.image("https://via.placeholder.com/200x60/0E1117/F5A623?text=NORTHSENTINEL", width=200)
+    st.markdown("---")
+    st.markdown("### ⚙️ Paramètres de risque")
+    st.metric("Capital", "1 000 000 $")
+    st.metric("Risque / trade", "2 %")
+    st.metric("SL max", "2.5 %")
+    st.metric("R/R min", "1:2")
+    st.markdown("---")
+    st.caption(f"Session ouverte – {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- LECTURE DU FICHIER DES SIGNAUX ---
-# On va chercher le fichier core_signals_today.json
-# Il peut être dans le même dépôt ou dans un autre.
-# On va d'abord chercher dans le répertoire courant, puis dans un chemin relatif.
-# Adapte le chemin selon ta structure.
-
-SIGNAL_FILE = "core_signals_today.json"  # par défaut, on le met à la racine
-if not os.path.exists(SIGNAL_FILE):
-    # On essaie un chemin alternatif (si tu l'as dans un dossier data/)
-    alt_path = os.path.join("data", "core_signals_today.json")
-    if os.path.exists(alt_path):
-        SIGNAL_FILE = alt_path
-
+# --- LECTURE DES SIGNAUX ---
+SIGNAL_FILE = "core_signals_today.json"
 signals = []
 if os.path.exists(SIGNAL_FILE):
     with open(SIGNAL_FILE, "r") as f:
@@ -68,55 +64,80 @@ if os.path.exists(SIGNAL_FILE):
         except:
             signals = []
 else:
-    st.warning("⚠️ Aucun fichier de signaux trouvé. Le fichier core_signals_today.json doit être présent pour afficher les setups.")
+    st.warning("⚠️ Aucun fichier de signaux trouvé.")
 
-# --- AFFICHAGE DES DERNIERS SETUPS ---
-st.header("📈 Derniers setups sauvegardés")
-
+# --- MÉTRIQUES PRINCIPALES (comme sur Netlify) ---
 if signals:
-    # On prend les 10 derniers signaux (les plus récents)
-    signals = signals[-10:][::-1]  # inversion pour avoir du plus récent au plus ancien
+    # On prend les 10 derniers
+    signals = signals[-10:][::-1]
+    total = len(signals)
+    avg_score = sum(s.get("score", 0) for s in signals) / total if total > 0 else 0
     
-    for s in signals:
-        ticker = s.get("ticker", "N/A")
-        signal_type = s.get("type", "STOCK")
-        entry = s.get("entry_price", 0)
-        score = s.get("score", 0)
-        gap = s.get("gap", 0)
-        vol_ratio = s.get("vol_ratio", 0)
-        trail_pct = s.get("trail_percent", 0)
-        timestamp = s.get("timestamp", "N/A")
-        cap_category = s.get("cap_category", "")
-        market_bias = s.get("market_bias", "")
-        spread_pct = s.get("spread_pct", 0)
-        
-        # Pour calculer TP et SL, on va les reconstituer approximativement
-        # En attendant, on peut juste les afficher tels quels
-        # On va essayer de lire les champs TP/SL s'ils sont présents
-        # Mais ils ne sont pas stockés directement dans le fichier actuel.
-        # On peut soit les calculer à partir des données (si on a la formule)
-        # soit les stocker plus tard. Ici on affiche ce qu'on a.
-        
-        with st.expander(f"🔹 {ticker} ({signal_type}) – Score: {score} – {timestamp}"):
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Prix d'entrée", f"${entry:.2f}")
-            col1.metric("Score", f"{score}/9" if signal_type=="STOCK" else f"{score}/5")
-            col2.metric("GAP", f"{gap:.1f}%")
-            col2.metric("Volume ratio", f"{vol_ratio:.1f}x")
-            col3.metric("Trailing stop", f"{trail_pct:.2f}%")
-            col3.metric("Spread", f"{spread_pct:.2f}%" if spread_pct else "N/A")
-            if cap_category:
-                st.caption(f"Capitalisation : {cap_category}")
-            if market_bias:
-                st.caption(f"Biais : {market_bias}")
+    col_met1, col_met2, col_met3, col_met4 = st.columns(4)
+    col_met1.metric("📊 Signaux récents", total)
+    col_met2.metric("⭐ Score moyen", f"{avg_score:.1f}/9" if avg_score > 0 else "N/A")
+    col_met3.metric("📈 Meilleur score", max([s.get("score", 0) for s in signals]) if signals else "N/A")
+    col_met4.metric("🔄 Dernier signal", signals[0].get("ticker", "N/A") if signals else "N/A")
 else:
     st.info("Aucun signal sauvegardé pour le moment. Les signaux apparaîtront après la première exécution du script Core.")
 
-# --- LOGS EN TEMPS RÉEL (optionnel) ---
-st.header("📋 Journal des opérations")
-# On peut éventuellement lire un fichier de log, mais pour l'instant on affiche un message.
-st.text("Les logs en temps réel seront disponibles lorsque le cockpit sera connecté au flux du script Core.")
+st.divider()
+
+# --- TABLEAU DES SIGNAUX ---
+st.markdown("### 📋 Derniers setups")
+
+if signals:
+    # Construction du tableau
+    data = []
+    for s in signals:
+        data.append({
+            "Ticker": s.get("ticker", "N/A"),
+            "Type": s.get("type", "STOCK"),
+            "Entry": f"${s.get('entry_price', 0):.2f}",
+            "Score": s.get("score", 0),
+            "Gap": f"{s.get('gap', 0):.1f}%",
+            "Vol Ratio": f"{s.get('vol_ratio', 0):.1f}x",
+            "Trail": f"{s.get('trail_percent', 0):.2f}%",
+            "Timestamp": s.get("timestamp", "N/A")
+        })
+    df = pd.DataFrame(data)
+    
+    # Coloration conditionnelle des scores
+    def color_score(val):
+        if val >= 7:
+            return 'background-color: #1a5e1a; color: white;'
+        elif val >= 5:
+            return 'background-color: #b8860b; color: white;'
+        else:
+            return 'background-color: #5e1a1a; color: white;'
+    
+    styled_df = df.style.applymap(color_score, subset=['Score'])
+    st.dataframe(styled_df, use_container_width=True, height=400)
+
+    # Détail du dernier signal
+    st.markdown("---")
+    st.markdown("### 🔍 Détail du dernier signal")
+    last = signals[0]
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Ticker", last.get("ticker", "N/A"))
+        st.metric("Type", last.get("type", "STOCK"))
+    with col2:
+        st.metric("Prix d'entrée", f"${last.get('entry_price', 0):.2f}")
+        st.metric("Score", f"{last.get('score', 0)}/9" if last.get("type")=="STOCK" else f"{last.get('score', 0)}/5")
+    with col3:
+        st.metric("GAP", f"{last.get('gap', 0):.1f}%")
+        st.metric("Trailing Stop", f"{last.get('trail_percent', 0):.2f}%")
+    if last.get("cap_category"):
+        st.caption(f"Capitalisation : {last.get('cap_category')}")
+    if last.get("market_bias"):
+        st.caption(f"Biais : {last.get('market_bias')}")
+else:
+    st.info("En attente des premiers signaux...")
 
 # --- PIED DE PAGE ---
-st.markdown("---")
-st.markdown("*NorthSentinel CORE – Cockpit v1.0 – © NorthSentinel Trading*")
+st.divider()
+st.markdown(
+    "<p style='text-align: center; color: #666; font-size: 0.8rem;'>NorthSentinel CORE – Cockpit v2.0 – © NorthSentinel Trading</p>",
+    unsafe_allow_html=True
+)
