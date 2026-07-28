@@ -124,7 +124,7 @@ def get_system_status():
     # Déterminer le statut
     if last_signal_time:
         delta_minutes = (now - last_signal_time).total_seconds() / 60
-        if delta_minutes < 15:
+        if delta_minutes < 3:
             return "🟢", "Run en cours"
         elif delta_minutes < 120:
             minutes = int(delta_minutes)
@@ -148,12 +148,16 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("<h3 style='color: #F5A623;'>⚙️ Paramètres de risque</h3>", unsafe_allow_html=True)
     st.metric("Capital", "1 000 000 $")
-    # --- AJOUT : Exposition max / trade ---
     st.metric("Exposition max / trade", "100 000 $")
     st.metric("Risque / trade", "2 %")
     st.metric("SL max", "2.5 %")
     st.metric("R/R min", "1:2")
     st.markdown("---")
+    # --- BOUTON DE DÉCONNEXION ---
+    if st.button("🚪 Se déconnecter", use_container_width=True):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
     st.caption(f"Session ouverte – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # --- LECTURE DES SIGNAUX (pour l'affichage principal) ---
