@@ -171,7 +171,7 @@ if run_status and run_status.get("run_active", False):
     time.sleep(3)
     st.rerun()
 else:
-    st.info("🔹 No run in progress. Next run is scheduled at the usual times (10:00, 10:30, 14:55, 15:55).")
+    st.info("🔹 No run in progress. Runs are scheduled at the usual times (10:00, 10:30, 14:55, 15:55).")
     st.caption("Updates will appear automatically once a run starts.")
 
 # --- SYSTEM STATUS FUNCTION (2 states - CORRECTED) ---
