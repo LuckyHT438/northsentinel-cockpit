@@ -33,7 +33,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CSS PERSONNALISÉ POUR LA SIDEBAR ---
+# --- CSS PERSONNALISÉ ---
 st.markdown(
     """
     <style>
@@ -53,30 +53,25 @@ st.markdown(
             font-size: 1rem !important;
         }
 
-        /* ---- STYLE DES BOUTONS (Connexion / Déconnexion) ---- */
-        /* Boutons primaires (pleins) */
-        div.stButton > button[kind="primary"] {
-            background-color: #F5A623 !important;
+        /* --- STYLE DES BOUTONS (Se connecter / Se déconnecter) --- */
+        /* Fond orange pâle, texte en gras, police noire */
+        .stButton > button {
+            background-color: #FFB74D !important;
             color: #000000 !important;
             font-weight: bold !important;
             border: none !important;
+            border-radius: 6px !important;
+            padding: 0.5rem 1.2rem !important;
+            transition: background-color 0.2s ease !important;
         }
-        /* Effet au survol */
-        div.stButton > button[kind="primary"]:hover {
-            background-color: #D98E1C !important;  /* Orange un peu plus foncé */
+        /* Effet au survol (optionnel) */
+        .stButton > button:hover {
+            background-color: #FFA726 !important;
             color: #000000 !important;
-            border: none !important;
         }
-        /* Si jamais le bouton n'a pas le type primary, on le met aussi en orange */
-        div.stButton > button {
-            background-color: #F5A623 !important;
-            color: #000000 !important;
-            font-weight: bold !important;
-            border: none !important;
-        }
-        div.stButton > button:hover {
-            background-color: #D98E1C !important;
-            color: #000000 !important;
+        /* Le bouton de déconnexion dans la sidebar ne s'étire pas */
+        .stButton > button {
+            width: auto !important;
         }
     </style>
     """,
@@ -91,8 +86,7 @@ def check_password():
         return True
     st.title("🔐 Accès restreint")
     password_input = st.text_input("Entrez le mot de passe", type="password")
-    # Bouton "Se connecter" en primary (plein) et gras
-    if st.button("Se connecter", type="primary"):
+    if st.button("Se connecter"):
         if password_input == st.secrets["password"]:
             st.session_state.authenticated = True
             st.rerun()
@@ -180,8 +174,8 @@ with st.sidebar:
     st.metric("SL max", "2.5 %")
     st.metric("R/R min", "1:2")
     st.markdown("---")
-    # Bouton "Se déconnecter" en primary (plein) et gras
-    if st.button("🚪 Se déconnecter", use_container_width=True, type="primary"):
+    # --- BOUTON DE DÉCONNEXION (sans use_container_width, donc largeur auto) ---
+    if st.button("Se déconnecter"):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
