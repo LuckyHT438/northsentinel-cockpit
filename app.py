@@ -111,10 +111,13 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- HEADER WITH LOGO ---
+# --- HEADER WITH LOGO (fallback si fichier absent) ---
 col1, col2 = st.columns([1, 5])
 with col1:
-    st.image("assets/logo_northsentinel_core.png", width=120)
+    try:
+        st.image("assets/logo_northsentinel_core.png", width=120)
+    except:
+        st.markdown("### 🏔️ NS")
 with col2:
     st.markdown("<h1 style='color: #F5A623; margin-bottom: 0;'>NorthSentinel CORE</h1>", unsafe_allow_html=True)
     st.markdown("<p style='color: #AAAAAA; margin-top: 0; font-size: 1.2rem;'>Real‑time system monitoring cockpit — Beta</p>", unsafe_allow_html=True)
@@ -175,7 +178,7 @@ else:
     st.info("🔹 No run in progress. Next run is scheduled at the usual times (10:00, 10:30, 14:55, 15:55).")
     st.caption("Updates will appear automatically once a run starts.")
 
-# --- SYSTEM STATUS FUNCTION (2 states) ---
+# --- SYSTEM STATUS FUNCTION (2 states - CORRECTED) ---
 def get_system_status():
     now = datetime.now(MONTREAL_TZ)
     
@@ -196,18 +199,21 @@ def get_system_status():
     if next_run is None:
         next_run = run_times[0] + timedelta(days=1)
     
-    # Read last signal
+    # Read last signal (with robust error handling)
     last_signal_time = None
     if os.path.exists(SIGNAL_FILE):
         try:
             with open(SIGNAL_FILE, 'r') as f:
-                signals = json.load(f)
-                if signals:
-                    last_ts = signals[-1].get('timestamp')
-                    if last_ts:
-                        last_signal_time = datetime.strptime(last_ts, '%Y-%m-%d %H:%M')
-                        last_signal_time = MONTREAL_TZ.localize(last_signal_time)
-        except:
+                content = f.read().strip()
+                if content:
+                    signals = json.loads(content)
+                    if signals and isinstance(signals, list) and len(signals) > 0:
+                        last_ts = signals[-1].get('timestamp')
+                        if last_ts:
+                            last_signal_time = datetime.strptime(last_ts, '%Y-%m-%d %H:%M')
+                            last_signal_time = MONTREAL_TZ.localize(last_signal_time)
+        except (json.JSONDecodeError, ValueError, IndexError):
+            # File is empty or malformed → ignore
             pass
     
     # Determine status (only 2 states)
