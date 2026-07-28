@@ -15,7 +15,6 @@ MONTREAL_TZ = pytz.timezone('America/Toronto')
 GITHUB_REPO = "LuckyHT438/northsentinel-data"
 GITHUB_PATH_SIGNALS = "core_signals_today.json"
 GITHUB_PATH_STATUS = "run_status.json"
-LOG_FILE = "core.log"
 
 # --- FONCTIONS DE CALCUL (reproduites depuis le Core) ---
 def get_market_bias_adjustment(bias_text):
