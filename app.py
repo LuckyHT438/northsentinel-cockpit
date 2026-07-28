@@ -90,15 +90,23 @@ with col2:
 
 st.divider()
 
-# --- FONCTIONS DE LECTURE ---
-@st.cache_data(ttl=30)
-def fetch_signals():
+# --- FONCTIONS DE LECTURE AVEC POSSIBILITÉ D'INVALIDER LE CACHE ---
+def fetch_signals(force_refresh=False):
+    """
+    Récupère les signaux depuis GitHub. Si force_refresh=True, on ignore le cache.
+    """
+    if force_refresh:
+        # Supprimer l'entrée du cache pour cette fonction
+        st.cache_data.clear()
     try:
         r = requests.get(SIGNAL_FILE_URL, timeout=5)
         if r.status_code == 200:
             return r.json()
-        return []
-    except:
+        else:
+            st.error(f"Erreur HTTP {r.status_code} lors de la récupération des signaux.")
+            return []
+    except Exception as e:
+        st.error(f"Erreur de connexion : {e}")
         return []
 
 def fetch_run_status():
@@ -110,7 +118,25 @@ def fetch_run_status():
     except:
         return None
 
-# --- LIVE EXECUTION SECTION (avec auto‑refresh) ---
+# --- BOUTON DE RAFRAÎCHISSEMENT MANUEL (pour forcer le rechargement) ---
+col_btn1, col_btn2 = st.columns(2)
+with col_btn1:
+    if st.button("🔄 Refresh signals now", use_container_width=True):
+        # Forcer le rechargement des signaux
+        st.session_state.force_refresh = True
+        st.rerun()
+with col_btn2:
+    if st.button("🔄 Refresh page", use_container_width=True):
+        st.rerun()
+
+# --- Si le flag force_refresh est présent, on le consomme ---
+force = st.session_state.get("force_refresh", False)
+if force:
+    st.session_state.force_refresh = False
+else:
+    force = False
+
+# --- LIVE EXECUTION SECTION ---
 st.markdown("### 📡 Live Execution")
 
 run_status = fetch_run_status()
@@ -146,6 +172,8 @@ else:
     st.info("🔹 No run in progress. Next run is scheduled at the usual times (10:00, 10:30, 14:55, 15:55).")
     st.caption("Updates will appear automatically once a run starts.")
 
+st.divider()
+
 # --- SYSTEM STATUS FUNCTION (2 états) ---
 def get_system_status():
     now = datetime.now(MONTREAL_TZ)
@@ -163,7 +191,7 @@ def get_system_status():
     if next_run is None:
         next_run = run_times[0] + timedelta(days=1)
 
-    signals = fetch_signals()
+    signals = fetch_signals(force_refresh=force)  # on passe le flag
     last_signal_time = None
     if signals and isinstance(signals, list) and len(signals) > 0:
         last_ts = signals[-1].get('timestamp')
@@ -206,7 +234,7 @@ with st.sidebar:
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # --- MAIN METRICS (depuis GitHub) ---
-signals = fetch_signals()
+signals = fetch_signals(force_refresh=force)
 if signals and isinstance(signals, list) and len(signals) > 0:
     signals = signals[-10:][::-1]
     total = len(signals)
@@ -218,6 +246,8 @@ if signals and isinstance(signals, list) and len(signals) > 0:
     col_met4.metric("🔄 Last signal", signals[0].get("ticker", "N/A") if signals else "N/A")
 else:
     st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
+    if not force:
+        st.caption("💡 Utilisez le bouton 'Refresh signals now' ci‑dessus pour forcer le rechargement.")
 
 st.divider()
 
