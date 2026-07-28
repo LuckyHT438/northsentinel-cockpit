@@ -55,13 +55,6 @@ st.markdown(
             width: auto !important;
         }
         .sidebar-signout button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
-        /* Supprimer les bordures du tableau */
-        .dataframe {
-            border: none !important;
-        }
-        .dataframe th, .dataframe td {
-            border: none !important;
-        }
     </style>
     """,
     unsafe_allow_html=True
@@ -227,39 +220,56 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- TABLEAU DES SIGNAUX (uniquement) ---
+# --- LATEST SETUPS (VERSION CARTES, COMME LAST SIGNAL DETAILS) ---
 st.markdown("### 📋 Latest setups")
 
 signals = fetch_signals()
 
 if signals and isinstance(signals, list) and len(signals) > 0:
-    # Construction du DataFrame
-    data = []
-    for s in signals:
-        data.append({
-            "Ticker": s.get("ticker", "N/A"),
-            "Type": s.get("type", "STOCK"),
-            "Entry": f"${s.get('entry_price', 0):.2f}",
-            "Score": s.get("score", 0),
-            "Gap": f"{s.get('gap', 0):.1f}%",
-            "Vol Ratio": f"{s.get('vol_ratio', 0):.1f}x",
-            "Trail": f"{s.get('trail_percent', 0):.2f}%",
-            "Timestamp": s.get("timestamp", "N/A"),
-            "Cap": s.get("cap_category", "N/A"),
-            "Bias": s.get("market_bias", "N/A")
-        })
-    df = pd.DataFrame(data)
-
-    # Style : pas de bordure, pas d'index, en-tête clair
-    styled_df = df.style.set_table_styles([
-        {'selector': 'thead tr th', 'props': [('background-color', '#2a2a2a'), ('color', 'white'), ('font-weight', 'bold'), ('text-align', 'center')]},
-        {'selector': 'tbody tr:nth-child(even)', 'props': [('background-color', '#1e1e1e')]},
-        {'selector': 'tbody tr:nth-child(odd)', 'props': [('background-color', '#262626')]},
-        {'selector': 'td', 'props': [('padding', '8px'), ('text-align', 'center')]},
-        {'selector': 'th', 'props': [('padding', '8px'), ('text-align', 'center')]}
-    ]).hide(axis='index')
-
-    st.dataframe(styled_df, use_container_width=True, height=400)
+    for idx, s in enumerate(signals):
+        if idx > 0:
+            st.markdown("---")
+        
+        col1, col2, col3, col4 = st.columns([1.5, 1, 1, 1.5])
+        with col1:
+            st.markdown(f"**{s.get('ticker', 'N/A')}**")
+            st.caption(s.get('type', 'STOCK'))
+        with col2:
+            st.metric("Entry", f"${s.get('entry_price', 0):.2f}")
+        with col3:
+            st.metric("Score", f"{s.get('score', 0)}/9" if s.get('type') == 'STOCK' else f"{s.get('score', 0)}/5")
+        with col4:
+            st.metric("GAP", f"{s.get('gap', 0):.1f}%")
+        
+        col5, col6, col7 = st.columns([1, 1, 1])
+        with col5:
+            st.caption(f"Vol Ratio: {s.get('vol_ratio', 0):.1f}x")
+        with col6:
+            st.caption(f"Trail: {s.get('trail_percent', 0):.2f}%")
+        with col7:
+            st.caption(f"Timestamp: {s.get('timestamp', 'N/A')}")
+        
+        if s.get("cap_category"):
+            st.caption(f"Cap: {s.get('cap_category')} | Bias: {s.get('market_bias', 'N/A')}")
+    
+    # --- Détail du dernier signal (inchangé) ---
+    st.markdown("---")
+    st.markdown("### 🔍 Last signal details")
+    last = signals[-1]
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Ticker", last.get("ticker", "N/A"))
+        st.metric("Type", last.get("type", "STOCK"))
+    with col2:
+        st.metric("Entry Price", f"${last.get('entry_price', 0):.2f}")
+        st.metric("Score", f"{last.get('score', 0)}/9" if last.get("type")=="STOCK" else f"{last.get('score', 0)}/5")
+    with col3:
+        st.metric("GAP", f"{last.get('gap', 0):.1f}%")
+        st.metric("Trailing Stop", f"{last.get('trail_percent', 0):.2f}%")
+    if last.get("cap_category"):
+        st.caption(f"Capitalization: {last.get('cap_category')}")
+    if last.get("market_bias"):
+        st.caption(f"Market bias: {last.get('market_bias')}")
 
 else:
     st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
