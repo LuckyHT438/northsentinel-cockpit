@@ -33,7 +33,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CSS PERSONNALISÉ ---
+# --- CSS PERSONNALISÉ (boutons, sidebar, etc.) ---
 st.markdown(
     """
     <style>
@@ -53,25 +53,35 @@ st.markdown(
             font-size: 1rem !important;
         }
 
-        /* --- STYLE DES BOUTONS (Se connecter / Se déconnecter) --- */
-        /* Fond orange pâle, texte en gras, police noire */
-        .stButton > button {
-            background-color: #FFB74D !important;
-            color: #000000 !important;
+        /* --- STYLE DES BOUTONS --- */
+        /* Bouton "Se connecter" (page de login) */
+        .stButton button {
             font-weight: bold !important;
+            background-color: #F5A623 !important;
+            color: #0E1117 !important;
             border: none !important;
-            border-radius: 6px !important;
-            padding: 0.5rem 1.2rem !important;
-            transition: background-color 0.2s ease !important;
+            border-radius: 4px !important;
+            padding: 0.5rem 1rem !important;
+            font-size: 1rem !important;
         }
-        /* Effet au survol (optionnel) */
-        .stButton > button:hover {
-            background-color: #FFA726 !important;
-            color: #000000 !important;
+        .stButton button:hover {
+            background-color: #e0951a !important;
+            color: #0E1117 !important;
         }
-        /* Le bouton de déconnexion dans la sidebar ne s'étire pas */
-        .stButton > button {
+        /* Bouton "Se déconnecter" dans la sidebar (sans largeur pleine) */
+        .sidebar-signout button {
+            font-weight: bold !important;
+            background-color: #F5A623 !important;
+            color: #0E1117 !important;
+            border: none !important;
+            border-radius: 4px !important;
+            padding: 0.5rem 1rem !important;
+            font-size: 0.9rem !important;
             width: auto !important;
+        }
+        .sidebar-signout button:hover {
+            background-color: #e0951a !important;
+            color: #0E1117 !important;
         }
     </style>
     """,
@@ -107,7 +117,7 @@ with col2:
 
 st.divider()
 
-# --- FONCTION DE STATUT DYNAMIQUE ---
+# --- FONCTION DE STATUT (SIMPLIFIÉE : 2 ÉTATS) ---
 def get_system_status():
     now = datetime.now(MONTREAL_TZ)
     
@@ -142,19 +152,17 @@ def get_system_status():
         except:
             pass
     
-    # Déterminer le statut
+    # Déterminer le statut (uniquement 2 états)
     if last_signal_time:
         delta_minutes = (now - last_signal_time).total_seconds() / 60
         if delta_minutes < 3:
             return "🟢", "Run en cours"
-        elif delta_minutes < 120:
-            minutes = int(delta_minutes)
-            return "🟡", f"Dernier run il y a {minutes} min"
-        else:
-            delta_next = next_run - now
-            hours = delta_next.seconds // 3600
-            minutes = (delta_next.seconds % 3600) // 60
-            return "🔵", f"Prochain run dans {hours}h {minutes:02d}min"
+    
+    # Si pas de run en cours, on affiche le prochain run
+    delta_next = next_run - now
+    hours = delta_next.seconds // 3600
+    minutes = (delta_next.seconds % 3600) // 60
+    return "🔵", f"Prochain run dans {hours}h {minutes:02d}min"
 
 # --- BARRE LATÉRALE (PARAMÈTRES + STATUT) ---
 with st.sidebar:
@@ -169,11 +177,15 @@ with st.sidebar:
     st.metric("SL max", "2.5 %")
     st.metric("R/R min", "1:2")
     st.markdown("---")
-    # --- BOUTON DE DÉCONNEXION (sans use_container_width, donc largeur auto) ---
-    if st.button("Se déconnecter"):
+    
+    # --- BOUTON DE DÉCONNEXION (avec classe CSS pour largeur auto) ---
+    st.markdown('<div class="sidebar-signout">', unsafe_allow_html=True)
+    if st.button("🚪 Se déconnecter"):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+    
     st.caption(f"Session ouverte – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # --- LECTURE DES SIGNAUX (pour l'affichage principal) ---
