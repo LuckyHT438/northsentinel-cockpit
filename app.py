@@ -4,15 +4,16 @@ import os
 from datetime import datetime, timedelta
 import pandas as pd
 import pytz
-import requests  # ← ajout
+import requests
 import time
 
 # --- MONTREAL TIMEZONE ---
 MONTREAL_TZ = pytz.timezone('America/Toronto')
 
-# --- FICHIERS (désormais lus depuis GitHub) ---
+# --- FICHIERS (lus depuis GitHub) ---
 SIGNAL_FILE_URL = "https://raw.githubusercontent.com/LuckyHT438/northsentinel-data/main/core_signals_today.json"
-LOG_FILE = "core.log"  # toujours en local (pas critique)
+RUN_STATUS_URL = "https://raw.githubusercontent.com/LuckyHT438/northsentinel-data/main/run_status.json"
+LOG_FILE = "core.log"  # en local (non critique)
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -22,7 +23,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CSS (identique) ---
+# --- CSS ---
 st.markdown(
     """
     <style>
@@ -89,23 +90,63 @@ with col2:
 
 st.divider()
 
-# --- FONCTION POUR RÉCUPÉRER LES SIGNAUX DEPUIS GITHUB ---
+# --- FONCTIONS DE LECTURE ---
 @st.cache_data(ttl=30)
 def fetch_signals():
     try:
-        response = requests.get(SIGNAL_FILE_URL, timeout=5)
-        if response.status_code == 200:
-            return response.json()
-        else:
-            return []
+        r = requests.get(SIGNAL_FILE_URL, timeout=5)
+        if r.status_code == 200:
+            return r.json()
+        return []
     except:
         return []
 
-# --- LIVE EXECUTION (adapté) ---
-st.markdown("### 📡 Live Execution")
-st.info("🔹 Le suivi en direct est actuellement en développement. Les signaux seront disponibles après chaque run (fichier poussé vers le dépôt de données).")
+def fetch_run_status():
+    try:
+        r = requests.get(RUN_STATUS_URL, timeout=3)
+        if r.status_code == 200:
+            return r.json()
+        return None
+    except:
+        return None
 
-# --- SYSTEM STATUS FUNCTION ---
+# --- LIVE EXECUTION SECTION (avec auto‑refresh) ---
+st.markdown("### 📡 Live Execution")
+
+run_status = fetch_run_status()
+
+if run_status and run_status.get("run_active", False):
+    phase = "📈 Stocks" if run_status.get("phase") == "stocks" else "📊 ETFs"
+    progress = run_status.get("progress", "0/0")
+    current_ticker = run_status.get("current_ticker", "")
+    last_action = run_status.get("last_action", "")
+    score = run_status.get("current_score", 0)
+    timestamp = run_status.get("timestamp", "")
+    
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+    col1.metric("Phase", f"{phase} ({progress})")
+    col2.metric("Current Ticker", current_ticker if current_ticker else "—")
+    col3.metric("Status", last_action)
+    col4.metric("Score", f"{score}/9" if score > 0 else "—")
+    
+    try:
+        prog_parts = progress.split('/')
+        if len(prog_parts) == 2:
+            current = int(prog_parts[0])
+            total = int(prog_parts[1])
+            st.progress(current / total if total > 0 else 0)
+    except:
+        pass
+    
+    st.caption(f"Last update: {timestamp}")
+    st.caption("🔄 Auto‑refresh: 3s")
+    time.sleep(3)
+    st.rerun()
+else:
+    st.info("🔹 No run in progress. Next run is scheduled at the usual times (10:00, 10:30, 14:55, 15:55).")
+    st.caption("Updates will appear automatically once a run starts.")
+
+# --- SYSTEM STATUS FUNCTION (2 états) ---
 def get_system_status():
     now = datetime.now(MONTREAL_TZ)
     run_times = [
@@ -228,7 +269,7 @@ else:
 
 st.divider()
 
-# --- LOGS SECTION (inchangé) ---
+# --- LOGS SECTION ---
 st.markdown("### 📋 Run logs")
 if os.path.exists(LOG_FILE):
     try:
