@@ -220,7 +220,7 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- LATEST SETUPS (VERSION CARTES, COMME LAST SIGNAL DETAILS) ---
+# --- LATEST SETUPS (VERSION SIMPLIFIÉE : TICKER, SCORE, GAP, VOL RATIO, TIMESTAMP) ---
 st.markdown("### 📋 Latest setups")
 
 signals = fetch_signals()
@@ -230,29 +230,21 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         if idx > 0:
             st.markdown("---")
         
-        col1, col2, col3, col4 = st.columns([1.5, 1, 1, 1.5])
+        # Une ligne avec les informations essentielles
+        col1, col2, col3, col4, col5 = st.columns([1.2, 0.8, 0.8, 0.8, 1.2])
         with col1:
             st.markdown(f"**{s.get('ticker', 'N/A')}**")
             st.caption(s.get('type', 'STOCK'))
         with col2:
-            st.metric("Entry", f"${s.get('entry_price', 0):.2f}")
-        with col3:
             st.metric("Score", f"{s.get('score', 0)}/9" if s.get('type') == 'STOCK' else f"{s.get('score', 0)}/5")
-        with col4:
+        with col3:
             st.metric("GAP", f"{s.get('gap', 0):.1f}%")
-        
-        col5, col6, col7 = st.columns([1, 1, 1])
+        with col4:
+            st.metric("Vol", f"{s.get('vol_ratio', 0):.1f}x")
         with col5:
-            st.caption(f"Vol Ratio: {s.get('vol_ratio', 0):.1f}x")
-        with col6:
-            st.caption(f"Trail: {s.get('trail_percent', 0):.2f}%")
-        with col7:
-            st.caption(f"Timestamp: {s.get('timestamp', 'N/A')}")
-        
-        if s.get("cap_category"):
-            st.caption(f"Cap: {s.get('cap_category')} | Bias: {s.get('market_bias', 'N/A')}")
+            st.caption(f"🕐 {s.get('timestamp', 'N/A')}")
     
-    # --- Détail du dernier signal (inchangé) ---
+    # --- Détail du dernier signal (complet) ---
     st.markdown("---")
     st.markdown("### 🔍 Last signal details")
     last = signals[-1]
