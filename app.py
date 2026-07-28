@@ -155,11 +155,6 @@ def get_system_status():
             hours = delta_next.seconds // 3600
             minutes = (delta_next.seconds % 3600) // 60
             return "🔵", f"Prochain run dans {hours}h {minutes:02d}min"
-    else:
-        delta_next = next_run - now
-        hours = delta_next.seconds // 3600
-        minutes = (delta_next.seconds % 3600) // 60
-        return "🔴", f"Aucun signal - prochain run dans {hours}h {minutes:02d}min"
 
 # --- BARRE LATÉRALE (PARAMÈTRES + STATUT) ---
 with st.sidebar:
