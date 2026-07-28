@@ -383,6 +383,37 @@ else:
     st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
     st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
 
+    # --- LAST SIGNAL DETAILS (tableau avec les autres métriques) ---
+    st.markdown("---")
+    st.markdown("### 🔍 Last signal details")
+    last = signals[-1]
+    detail_data = [{
+        "Score": last.get('score', 0),
+        "Gap": f"{last.get('gap', 0):.1f}%",
+        "Vol. ratio": f"{last.get('vol_ratio', 0):.1f}x",
+        "Market bias": last.get('market_bias', 'N/A'),
+        "Run time": last.get('timestamp', 'N/A')
+    }]
+    df_detail = pd.DataFrame(detail_data)
+    st.dataframe(
+        df_detail,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Score": st.column_config.NumberColumn("Score", width="small", alignment="left"),
+            "Gap": st.column_config.TextColumn("Gap", width="small"),
+            "Vol. ratio": st.column_config.TextColumn("Vol. ratio", width="small"),
+            "Market bias": st.column_config.TextColumn("Market bias", width="medium"),
+            "Run time": st.column_config.TextColumn("Run time", width="medium")
+        }
+    )
+
+else:
+    st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
+    st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
+
+st.divider()
+
 # --- FOOTER ---
 st.divider()
 st.markdown(
