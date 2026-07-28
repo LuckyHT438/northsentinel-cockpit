@@ -8,26 +8,74 @@ import requests
 import base64
 from streamlit_autorefresh import st_autorefresh
 
+# --- MONTREAL TIMEZONE ---
 MONTREAL_TZ = pytz.timezone('America/Toronto')
+
+# --- FICHIERS (via API GitHub avec token) ---
 GITHUB_REPO = "LuckyHT438/northsentinel-data"
 GITHUB_PATH = "core_signals_today.json"
 RUN_STATUS_URL = "https://raw.githubusercontent.com/LuckyHT438/northsentinel-data/main/run_status.json"
+LOG_FILE = "core.log"
 
-st.set_page_config(page_title="NorthSentinel CORE", page_icon="📊", layout="wide", initial_sidebar_state="collapsed")
+# --- PAGE CONFIGURATION ---
+st.set_page_config(
+    page_title="NorthSentinel CORE",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# --- AUTH ---
+# --- CSS ---
+st.markdown(
+    """
+    <style>
+        .css-1d391kg, .css-12oz5g7, .css-1v3fvcr, .css-1v0mbdj { font-size: 0.85rem !important; }
+        [data-testid="stMetricValue"] { font-size: 0.95rem !important; }
+        [data-testid="stMetricLabel"] { font-size: 0.8rem !important; }
+        section[data-testid="stSidebar"] [data-testid="stMetricLabel"] { color: #F5A623 !important; }
+        .css-1v3fvcr h3 { font-size: 1rem !important; }
+        .stButton button {
+            font-weight: bold !important;
+            background-color: #F5A623 !important;
+            color: #0E1117 !important;
+            border: none !important;
+            border-radius: 4px !important;
+            padding: 0.5rem 1rem !important;
+            font-size: 1rem !important;
+        }
+        .stButton button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
+        .sidebar-signout button {
+            font-weight: bold !important;
+            background-color: #F5A623 !important;
+            color: #0E1117 !important;
+            border: none !important;
+            border-radius: 4px !important;
+            padding: 0.5rem 1rem !important;
+            font-size: 0.9rem !important;
+            width: auto !important;
+        }
+        .sidebar-signout button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# --- AUTHENTIFICATION ---
 def check_password():
-    if "authenticated" in st.session_state and st.session_state.authenticated:
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+    if st.session_state.authenticated:
         return True
     st.title("🔐 Restricted Access")
-    pw = st.text_input("Enter password", type="password")
+    password_input = st.text_input("Enter password", type="password")
     if st.button("Sign in"):
-        if pw == st.secrets["password"]:
+        if password_input == st.secrets["password"]:
             st.session_state.authenticated = True
             st.rerun()
         else:
             st.error("Incorrect password")
     return False
+
 if not check_password():
     st.stop()
 
@@ -37,14 +85,14 @@ with col1:
     try:
         st.image("assets/logo_northsentinel_core.png", width=120)
     except:
-        st.markdown("### 🏔️")
+        st.markdown("### 🏔️ NS")
 with col2:
-    st.markdown("<h1 style='color: #F5A623;'>NorthSentinel CORE</h1>", unsafe_allow_html=True)
-    st.markdown("Real‑time system monitoring cockpit — Beta")
+    st.markdown("<h1 style='color: #F5A623; margin-bottom: 0;'>NorthSentinel CORE</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #AAAAAA; margin-top: 0; font-size: 1.2rem;'>Real‑time system monitoring cockpit — Beta</p>", unsafe_allow_html=True)
 
 st.divider()
 
-# --- FUNCTIONS ---
+# --- FONCTIONS DE LECTURE ---
 @st.cache_data(ttl=10)
 def fetch_signals():
     token = st.secrets.get("GITHUB_TOKEN", "")
@@ -59,20 +107,20 @@ def fetch_signals():
             content = base64.b64decode(data["content"]).decode("utf-8")
             signals = json.loads(content)
             return signals if isinstance(signals, list) else []
+        return []
     except:
-        pass
-    return []
+        return []
 
 def fetch_run_status():
     try:
         r = requests.get(RUN_STATUS_URL, timeout=3)
         if r.status_code == 200:
             return r.json()
+        return None
     except:
-        pass
-    return None
+        return None
 
-# --- AUTO-REFRESH ---
+# --- AUTO-REFRESH INTELLIGENT ---
 run_status = fetch_run_status()
 run_active = run_status and run_status.get("run_active", False)
 
@@ -83,16 +131,96 @@ else:
 
 # --- LIVE EXECUTION ---
 st.markdown("### 📡 Live Execution")
+
 if run_active:
-    st.metric("Phase", f"{run_status.get('phase', '')} ({run_status.get('progress', '0/0')})")
-    st.metric("Current Ticker", run_status.get('current_ticker', '—'))
-    st.metric("Status", run_status.get('last_action', '—'))
-    st.metric("Score", run_status.get('current_score', 0))
+    phase = "📈 Stocks" if run_status.get("phase") == "stocks" else "📊 ETFs"
+    progress = run_status.get("progress", "0/0")
+    current_ticker = run_status.get("current_ticker", "")
+    last_action = run_status.get("last_action", "")
+    score = run_status.get("current_score", 0)
+    timestamp = run_status.get("timestamp", "")
+    
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+    col1.metric("Phase", f"{phase} ({progress})")
+    col2.metric("Current Ticker", current_ticker if current_ticker else "—")
+    col3.metric("Status", last_action)
+    col4.metric("Score", f"{score}/9" if score > 0 else "—")
+    
+    try:
+        prog_parts = progress.split('/')
+        if len(prog_parts) == 2:
+            current = int(prog_parts[0])
+            total = int(prog_parts[1])
+            st.progress(current / total if total > 0 else 0)
+    except:
+        pass
+    
+    st.caption(f"Last update: {timestamp}")
+    st.caption("🔄 Auto‑refresh: 3s")
 else:
-    st.info("No run in progress. Auto‑refresh: 30s")
+    st.info("🔹 No run in progress. Auto‑refresh toutes les 30s pour détecter les nouveaux signaux.")
+    st.caption("🔄 Auto‑refresh: 30s")
+
 st.divider()
 
-# --- TABLEAU DES SIGNAUX (EXACT) ---
+# --- SYSTEM STATUS (pour la sidebar) ---
+def get_system_status():
+    now = datetime.now(MONTREAL_TZ)
+    run_times = [
+        now.replace(hour=10, minute=0, second=0, microsecond=0),
+        now.replace(hour=10, minute=30, second=0, microsecond=0),
+        now.replace(hour=14, minute=55, second=0, microsecond=0),
+        now.replace(hour=15, minute=55, second=0, microsecond=0)
+    ]
+    next_run = None
+    for rt in run_times:
+        if rt > now:
+            next_run = rt
+            break
+    if next_run is None:
+        next_run = run_times[0] + timedelta(days=1)
+
+    signals = fetch_signals()
+    last_signal_time = None
+    if signals and isinstance(signals, list) and len(signals) > 0:
+        last_ts = signals[-1].get('timestamp')
+        if last_ts:
+            try:
+                last_signal_time = datetime.strptime(last_ts, '%Y-%m-%d %H:%M')
+                last_signal_time = MONTREAL_TZ.localize(last_signal_time)
+            except:
+                pass
+
+    if last_signal_time and (now - last_signal_time).total_seconds() / 60 < 3:
+        return "🟢", "Run in progress (latest signal recent)"
+
+    delta_next = next_run - now
+    hours = delta_next.seconds // 3600
+    minutes = (delta_next.seconds % 3600) // 60
+    return "🔵", f"Next run in {hours}h {minutes:02d}min"
+
+# --- SIDEBAR (RESTAURÉE) ---
+with st.sidebar:
+    status_emoji, status_msg = get_system_status()
+    st.markdown(f"### {status_emoji} Status")
+    st.markdown(f"*{status_msg}*")
+    st.markdown("---")
+    st.markdown("<h3 style='color: #F5A623;'>⚙️ Risk Parameters</h3>", unsafe_allow_html=True)
+    st.metric("Capital", "1 000 000 $")
+    st.metric("Max exposure / trade", "100 000 $")
+    st.metric("Risk / trade", "2 %")
+    st.metric("Max Stop-Loss", "2.5 %")
+    st.metric("Risk/Reward ratio", "1:2")
+    st.markdown("---")
+    st.markdown('<div class="sidebar-signout">', unsafe_allow_html=True)
+    if st.button("Sign out"):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
+
+# --- TABLEAU DES SIGNAUX (sans index, sans bordures, score aligné à gauche) ---
 st.markdown("### 📋 Latest setups")
 
 signals = fetch_signals()
@@ -111,17 +239,64 @@ if signals and isinstance(signals, list) and len(signals) > 0:
             "Timestamp": s.get("timestamp", "N/A")
         })
     df = pd.DataFrame(data)
-    # Pas de colonne d'index, pas de bordures, pas de couleur
-    st.dataframe(df, use_container_width=True, hide_index=True)
 
+    # Application du style : alignement à gauche sur toutes les cellules, pas de bordures
+    styled_df = df.style.set_properties(**{
+        'text-align': 'left',
+        'padding': '8px'
+    }).set_table_styles([
+        {'selector': 'thead tr th', 'props': [('text-align', 'left'), ('background-color', '#2a2a2a'), ('color', 'white'), ('font-weight', 'bold')]},
+        {'selector': 'tbody tr:nth-child(even)', 'props': [('background-color', '#1e1e1e')]},
+        {'selector': 'tbody tr:nth-child(odd)', 'props': [('background-color', '#262626')]}
+    ]).hide(axis='index')
+
+    st.dataframe(styled_df, use_container_width=True, height=400)
+
+    # --- DÉTAIL DU DERNIER SIGNAL (RESTAURÉ) ---
     st.markdown("---")
     st.markdown("### 🔍 Last signal details")
     last = signals[-1]
-    st.metric("Ticker", last.get("ticker", "N/A"))
-    st.metric("Entry Price", f"${last.get('entry_price', 0):.2f}")
-    st.metric("Score", last.get("score", 0))
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Ticker", last.get("ticker", "N/A"))
+        st.metric("Type", last.get("type", "STOCK"))
+    with col2:
+        st.metric("Entry Price", f"${last.get('entry_price', 0):.2f}")
+        st.metric("Score", f"{last.get('score', 0)}/9" if last.get("type")=="STOCK" else f"{last.get('score', 0)}/5")
+    with col3:
+        st.metric("GAP", f"{last.get('gap', 0):.1f}%")
+        st.metric("Trailing Stop", f"{last.get('trail_percent', 0):.2f}%")
+    if last.get("cap_category"):
+        st.caption(f"Capitalization: {last.get('cap_category')}")
+    if last.get("market_bias"):
+        st.caption(f"Market bias: {last.get('market_bias')}")
+
 else:
-    st.info("Aucun signal pour le moment.")
+    st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
+    st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
 
 st.divider()
-st.caption("NorthSentinel CORE – Cockpit v2.0 – July, 2026")
+
+# --- LOGS SECTION (RESTAURÉE) ---
+st.markdown("### 📋 Run logs")
+if os.path.exists(LOG_FILE):
+    try:
+        with open(LOG_FILE, "r") as f:
+            log_lines = f.readlines()
+            if len(log_lines) > 50:
+                log_lines = log_lines[-50:]
+            log_text = "".join(log_lines)
+            st.code(log_text, language="log", line_numbers=False)
+            st.caption(f"Showing last {len(log_lines)} lines from {LOG_FILE}")
+    except Exception as e:
+        st.error(f"Error reading log file: {e}")
+else:
+    st.info("📭 No logs available yet.")
+    st.caption("Logs are stored locally and only visible when running in the same environment as the Core script.")
+
+# --- FOOTER ---
+st.divider()
+st.markdown(
+    "<p style='text-align: center; color: #666; font-size: 0.9rem;'>NorthSentinel CORE – Cockpit v2.0 – July, 2026 © NorthSentinel Trading</p>",
+    unsafe_allow_html=True
+)
