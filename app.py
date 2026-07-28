@@ -379,25 +379,6 @@ else:
     st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
     st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
 
-st.divider()
-
-# --- LOGS SECTION ---
-st.markdown("### 📋 Run logs")
-if os.path.exists(LOG_FILE):
-    try:
-        with open(LOG_FILE, "r") as f:
-            log_lines = f.readlines()
-            if len(log_lines) > 50:
-                log_lines = log_lines[-50:]
-            log_text = "".join(log_lines)
-            st.code(log_text, language="log", line_numbers=False)
-            st.caption(f"Showing last {len(log_lines)} lines from {LOG_FILE}")
-    except Exception as e:
-        st.error(f"Error reading log file: {e}")
-else:
-    st.info("📭 No logs available yet.")
-    st.caption("Logs are stored locally and only visible when running in the same environment as the Core script.")
-
 # --- FOOTER ---
 st.divider()
 st.markdown(
