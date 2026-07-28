@@ -287,6 +287,6 @@ else:
 # --- PIED DE PAGE ---
 st.divider()
 st.markdown(
-    "<p style='text-align: center; color: #666; font-size: 0.9rem;'>NorthSentinel CORE – Cockpit v2.0 – © NorthSentinel Trading</p>",
+    "<p style='text-align: center; color: #666; font-size: 0.9rem;'>NorthSentinel CORE – Cockpit v2.0 – July, 2026 © NorthSentinel Trading</p>",
     unsafe_allow_html=True
 )
