@@ -48,6 +48,10 @@ st.markdown(
         [data-testid="stMetricLabel"] {
             font-size: 0.8rem !important;
         }
+        * Titres des métriques en orange dans la sidebar */
+        section[data-testid="stSidebar"] [data-testid="stMetricLabel"] {
+            color: #F5A623 !important;
+        }
         /* Reduce sidebar title */
         .css-1v3fvcr h3 {
             font-size: 1rem !important;
@@ -228,8 +232,8 @@ with st.sidebar:
     st.metric("Capital", "1 000 000 $")
     st.metric("Max exposure / trade", "100 000 $")
     st.metric("Risk / trade", "2 %")
-    st.metric("Max SL", "2.5 %")
-    st.metric("R/R ratio", "1:2")
+    st.metric("Max Stop-Loss", "2.5 %")
+    st.metric("Risk/Reward ratio", "1:2")
     st.markdown("---")
     
     # --- SIGN OUT BUTTON ---
