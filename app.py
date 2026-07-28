@@ -43,7 +43,7 @@ st.markdown(
         }
         /* Reduce metric font size */
         [data-testid="stMetricValue"] {
-            font-size: 0.9rem !important;
+            font-size: 0.95rem !important;
         }
         [data-testid="stMetricLabel"] {
             font-size: 0.8rem !important;
