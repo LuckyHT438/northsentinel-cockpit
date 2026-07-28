@@ -6,7 +6,7 @@ import pandas as pd
 import pytz
 import requests
 import base64
-from streamlit_autorefresh import st_autorefresh  # <<< NOUVEAU
+from streamlit_autorefresh import st_autorefresh
 
 # --- MONTREAL TIMEZONE ---
 MONTREAL_TZ = pytz.timezone('America/Toronto')
@@ -220,23 +220,13 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- MAIN METRICS & TABLE ---
+# --- TABLEAU DES SIGNAUX (sans métriques, sans index, sans couleurs de score) ---
 signals = fetch_signals()
 
 if signals and isinstance(signals, list) and len(signals) > 0:
-    signals_display = signals[-10:][::-1]
-    total = len(signals_display)
-    avg_score = sum(s.get("score", 0) for s in signals_display) / total if total > 0 else 0
-
-    col_met1, col_met2, col_met3, col_met4 = st.columns(4)
-    col_met1.metric("📊 Recent signals", total)
-    col_met2.metric("⭐ Average score", f"{avg_score:.1f}/9" if avg_score > 0 else "N/A")
-    col_met3.metric("📈 Best score", max([s.get("score", 0) for s in signals_display]) if signals_display else "N/A")
-    col_met4.metric("🔄 Last signal", signals_display[0].get("ticker", "N/A") if signals_display else "N/A")
-
-    st.divider()
     st.markdown("### 📋 Latest setups")
 
+    # Construction du DataFrame sans l'index
     data = []
     for s in signals:
         data.append({
@@ -251,16 +241,23 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         })
     df = pd.DataFrame(data)
 
-    def color_score(val):
-        if val >= 7:
-            return 'background-color: #1a5e1a; color: white;'
-        elif val >= 5:
-            return 'background-color: #b8860b; color: white;'
-        else:
-            return 'background-color: #5e1a1a; color: white;'
-
-    styled_df = df.style.map(color_score, subset=['Score'])
-    st.dataframe(styled_df, use_container_width=True, height=400)
+    # Affichage sans index et sans couleur de fond
+    st.dataframe(
+        df,
+        use_container_width=True,
+        height=400,
+        hide_index=True,  # Supprime la colonne d'index
+        column_config={
+            "Ticker": st.column_config.TextColumn("Ticker", width="small"),
+            "Type": st.column_config.TextColumn("Type", width="small"),
+            "Entry": st.column_config.TextColumn("Entry", width="small"),
+            "Score": st.column_config.NumberColumn("Score", width="small"),
+            "Gap": st.column_config.TextColumn("Gap", width="small"),
+            "Vol Ratio": st.column_config.TextColumn("Vol Ratio", width="small"),
+            "Trail": st.column_config.TextColumn("Trail", width="small"),
+            "Timestamp": st.column_config.TextColumn("Timestamp", width="medium")
+        }
+    )
 
     st.markdown("---")
     st.markdown("### 🔍 Last signal details")
