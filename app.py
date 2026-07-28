@@ -4,6 +4,7 @@ import os
 from datetime import datetime, timedelta
 import pandas as pd
 import pytz
+import time  # ← ajout pour l'auto‑refresh
 
 # --- MONTREAL TIMEZONE (AMERICA/TORONTO) ---
 MONTREAL_TZ = pytz.timezone('America/Toronto')
@@ -130,14 +131,16 @@ st.markdown("### 📡 Live Execution")
 # --- READ CURRENT RUN STATUS ---
 RUN_STATUS_FILE = "run_status.json"
 
-if os.path.exists(RUN_STATUS_FILE):
-    with open(RUN_STATUS_FILE, "r") as f:
+def get_run_status():
+    if os.path.exists(RUN_STATUS_FILE):
         try:
-            run_status = json.load(f)
+            with open(RUN_STATUS_FILE, "r") as f:
+                return json.load(f)
         except:
-            run_status = None
-else:
-    run_status = None
+            return None
+    return None
+
+run_status = get_run_status()
 
 if run_status and run_status.get("run_active", False):
     phase = "📈 Stocks" if run_status.get("phase") == "stocks" else "📊 ETFs"
@@ -164,16 +167,9 @@ if run_status and run_status.get("run_active", False):
         pass
     
     st.caption(f"Last update: {timestamp}")
-    
-    if st.button("🔄 Refresh now"):
-        st.rerun()
-    # Auto-refresh via JavaScript (handled by Streamlit)
-    st.markdown(
-        """
-        <meta http-equiv="refresh" content="2">
-        """,
-        unsafe_allow_html=True
-    )
+    st.caption("🔄 Auto‑refresh: 3s")
+    time.sleep(3)
+    st.rerun()
 else:
     st.info("🔹 No run in progress. Next run is scheduled at the usual times (10:00, 10:30, 14:55, 15:55).")
     st.caption("Updates will appear automatically once a run starts.")
