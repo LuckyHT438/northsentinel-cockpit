@@ -106,7 +106,10 @@ def fetch_signals():
             data = r.json()
             content = base64.b64decode(data["content"]).decode("utf-8")
             signals = json.loads(content)
-            return signals if isinstance(signals, list) else []
+            if isinstance(signals, list):
+                # Filtrer les entrées vides ou mal formées
+                return [s for s in signals if s and isinstance(s, dict) and s.get('ticker')]
+            return []
         return []
     except:
         return []
@@ -220,14 +223,18 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- TABLEAU DES SIGNAUX (METRIQUES SUPPRIMEES) ---
+# --- TABLEAU DES SIGNAUX (DYNAMIQUE, SANS LIGNES VIDES) ---
 signals = fetch_signals()
 
 st.markdown("### 📋 Latest setups")
 
-if signals and isinstance(signals, list) and len(signals) > 0:
+if signals and len(signals) > 0:
+    # Trier du plus récent au plus ancien (par timestamp)
+    signals_sorted = sorted(signals, key=lambda x: x.get('timestamp', ''), reverse=True)
+    
     data = []
-    for s in signals:
+    for s in signals_sorted:
+        # S'assurer que toutes les clés existent
         data.append({
             "Ticker": s.get("ticker", "N/A"),
             "Type": s.get("type", "STOCK"),
@@ -238,6 +245,7 @@ if signals and isinstance(signals, list) and len(signals) > 0:
             "Trail": f"{s.get('trail_percent', 0):.2f}%",
             "Timestamp": s.get("timestamp", "N/A")
         })
+    
     df = pd.DataFrame(data)
 
     # --- STYLE PROFESSIONNEL (sans couleur sur Score) ---
@@ -247,14 +255,14 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         {'selector': 'tbody tr:nth-child(odd)', 'props': [('background-color', '#262626')]},
         {'selector': 'td', 'props': [('padding', '8px'), ('border', '1px solid #444'), ('text-align', 'center')]},
         {'selector': 'th', 'props': [('padding', '8px'), ('border', '1px solid #444'), ('text-align', 'center')]}
-    ]).hide(axis='index')  # cache l'index (colonne numérotée)
+    ]).hide(axis='index')
 
     st.dataframe(styled_df, use_container_width=True, height=400)
 
-    # --- Détail du dernier signal (conservé) ---
+    # --- Détail du dernier signal (le plus récent) ---
     st.markdown("---")
     st.markdown("### 🔍 Last signal details")
-    last = signals[0]
+    last = signals_sorted[0]  # le plus récent
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Ticker", last.get("ticker", "N/A"))
