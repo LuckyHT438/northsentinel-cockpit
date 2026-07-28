@@ -74,7 +74,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- CSS (suppression des bordures + réduction des marges des séparateurs) ---
+# --- CSS (suppression des bordures, espacements réduits) ---
 st.markdown(
     """
     <style>
@@ -116,9 +116,19 @@ st.markdown(
             font-weight: bold !important;
         }
 
-        /* Réduire l’espace entre les sections (séparateurs) */
-        hr {
+        /* Réduire les marges entre les sections */
+        .block-container {
+            padding-top: 1rem !important;
+            padding-bottom: 0.5rem !important;
+        }
+        .stMarkdown h3 {
+            margin-bottom: 0.25rem !important;
+        }
+        .stMarkdown hr {
             margin: 0.5rem 0 !important;
+        }
+        .stDataFrame {
+            margin-top: 0.25rem !important;
         }
     </style>
     """,
@@ -155,7 +165,7 @@ with col2:
     st.markdown("<h1 style='color: #F5A623; margin-bottom: 0;'>NorthSentinel CORE</h1>", unsafe_allow_html=True)
     st.markdown("<p style='color: #AAAAAA; margin-top: 0; font-size: 1.2rem;'>Real‑time system monitoring cockpit — Beta</p>", unsafe_allow_html=True)
 
-st.divider()
+st.divider()  # Gardé pour séparer le header du contenu
 
 # --- FONCTIONS DE LECTURE (avec API GitHub) ---
 @st.cache_data(ttl=10)
@@ -246,8 +256,6 @@ if run_active:
 else:
     st.info("🔹 No run in progress. Auto‑refresh toutes les 30s pour détecter les nouveaux signaux.")
     st.caption("🔄 Auto‑refresh: 30s")
-
-st.divider()
 
 # --- SYSTEM STATUS (pour la sidebar) ---
 def get_system_status():
@@ -383,9 +391,8 @@ else:
     st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
     st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
 
-# --- FOOTER ---
-st.divider()
+# --- FOOTER (avec un espace réduit) ---
 st.markdown(
-    "<p style='text-align: center; color: #666; font-size: 0.9rem;'>NorthSentinel CORE – Cockpit v2.0 – July, 2026 © NorthSentinel Trading</p>",
+    "<p style='text-align: center; color: #666; font-size: 0.8rem; margin-top: 1rem;'>NorthSentinel CORE – Cockpit v2.0 – July, 2026 © NorthSentinel Trading</p>",
     unsafe_allow_html=True
 )
