@@ -13,8 +13,8 @@ MONTREAL_TZ = pytz.timezone('America/Toronto')
 
 # --- FICHIERS (via API GitHub avec token) ---
 GITHUB_REPO = "LuckyHT438/northsentinel-data"
-GITHUB_PATH = "core_signals_today.json"
-RUN_STATUS_URL = "https://raw.githubusercontent.com/LuckyHT438/northsentinel-data/main/run_status.json"
+GITHUB_PATH_SIGNALS = "core_signals_today.json"
+GITHUB_PATH_STATUS = "run_status.json"
 LOG_FILE = "core.log"
 
 # --- FONCTIONS DE CALCUL (reproduites depuis le Core) ---
@@ -153,14 +153,14 @@ with col2:
 
 st.divider()
 
-# --- FONCTIONS DE LECTURE ---
+# --- FONCTIONS DE LECTURE (avec API GitHub) ---
 @st.cache_data(ttl=10)
 def fetch_signals():
     token = st.secrets.get("GITHUB_TOKEN", "")
     if not token:
         return []
     try:
-        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_PATH}"
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_PATH_SIGNALS}"
         headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
         r = requests.get(url, headers=headers, timeout=5)
         if r.status_code == 200:
@@ -173,10 +173,17 @@ def fetch_signals():
         return []
 
 def fetch_run_status():
+    token = st.secrets.get("GITHUB_TOKEN", "")
+    if not token:
+        return None
     try:
-        r = requests.get(RUN_STATUS_URL, timeout=3)
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_PATH_STATUS}"
+        headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+        r = requests.get(url, headers=headers, timeout=3)
         if r.status_code == 200:
-            return r.json()
+            data = r.json()
+            content = base64.b64decode(data["content"]).decode("utf-8")
+            return json.loads(content)
         return None
     except:
         return None
@@ -296,7 +303,6 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         market_bias = s.get('market_bias', '')
         score = s.get('score', 0)
         gap = s.get('gap', 0)
-        # Calculer TP et SL
         tp_mult = get_tp_multiplier(score, gap, cap_cat, market_bias, spread_pct)
         sl_mult = get_sl_multiplier(score, cap_cat, market_bias, spread_pct)
         tp_price = round(entry * tp_mult, 2)
