@@ -180,7 +180,7 @@ with st.sidebar:
     
     # --- BOUTON DE DÉCONNEXION (avec classe CSS pour largeur auto) ---
     st.markdown('<div class="sidebar-signout">', unsafe_allow_html=True)
-    if st.button("🚪 Se déconnecter"):
+    if st.button("Se déconnecter"):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
