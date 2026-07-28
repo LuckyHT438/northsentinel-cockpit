@@ -5,14 +5,14 @@ from datetime import datetime, timedelta
 import pandas as pd
 import pytz
 
-# --- FUSEAU HORAIRE DE MONTRÉAL (AMERICA/TORONTO) ---
+# --- MONTREAL TIMEZONE (AMERICA/TORONTO) ---
 MONTREAL_TZ = pytz.timezone('America/Toronto')
 
-# --- DÉFINITION DES FICHIERS (AVANT LA ROTATION) ---
+# --- FILE DEFINITIONS (BEFORE ROTATION) ---
 SIGNAL_FILE = "core_signals_today.json"
 LOG_FILE = "core.log"
 
-# --- ROTATION AUTOMATIQUE DU FICHIER DE LOG (1x/jour à minuit) ---
+# --- AUTOMATIC LOG ROTATION (once/day at midnight) ---
 if os.path.exists(LOG_FILE):
     mtime = os.path.getmtime(LOG_FILE)
     last_mod = datetime.fromtimestamp(mtime, MONTREAL_TZ)
@@ -23,9 +23,9 @@ if os.path.exists(LOG_FILE):
         os.rename(LOG_FILE, archive_name)
         with open(LOG_FILE, 'w') as f:
             pass
-        print(f"✅ Log archivé : {archive_name}")
+        print(f"✅ Log archived: {archive_name}")
 
-# --- CONFIGURATION DE LA PAGE ---
+# --- PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="NorthSentinel CORE",
     page_icon="📊",
@@ -33,28 +33,28 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CSS PERSONNALISÉ (boutons, sidebar, etc.) ---
+# --- CUSTOM CSS (buttons, sidebar, etc.) ---
 st.markdown(
     """
     <style>
-        /* Réduit la taille de la police dans toute la sidebar */
+        /* Reduce font size in sidebar */
         .css-1d391kg, .css-12oz5g7, .css-1v3fvcr, .css-1v0mbdj {
             font-size: 0.85rem !important;
         }
-        /* Réduit la taille des métriques */
+        /* Reduce metric font size */
         [data-testid="stMetricValue"] {
             font-size: 1.2rem !important;
         }
         [data-testid="stMetricLabel"] {
             font-size: 0.8rem !important;
         }
-        /* Réduit le titre de la sidebar */
+        /* Reduce sidebar title */
         .css-1v3fvcr h3 {
             font-size: 1rem !important;
         }
 
-        /* --- STYLE DES BOUTONS --- */
-        /* Bouton "Se connecter" (page de login) */
+        /* --- BUTTON STYLES --- */
+        /* "Sign in" button (login page) */
         .stButton button {
             font-weight: bold !important;
             background-color: #F5A623 !important;
@@ -68,7 +68,7 @@ st.markdown(
             background-color: #e0951a !important;
             color: #0E1117 !important;
         }
-        /* Bouton "Se déconnecter" dans la sidebar (sans largeur pleine) */
+        /* "Sign out" button in sidebar (auto width) */
         .sidebar-signout button {
             font-weight: bold !important;
             background-color: #F5A623 !important;
@@ -88,39 +88,39 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- AUTHENTIFICATION ---
+# --- AUTHENTICATION ---
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
     if st.session_state.authenticated:
         return True
-    st.title("🔐 Accès restreint")
-    password_input = st.text_input("Entrez le mot de passe", type="password")
-    if st.button("Se connecter"):
+    st.title("🔐 Restricted Access")
+    password_input = st.text_input("Enter password", type="password")
+    if st.button("Sign in"):
         if password_input == st.secrets["password"]:
             st.session_state.authenticated = True
             st.rerun()
         else:
-            st.error("Mot de passe incorrect")
+            st.error("Incorrect password")
     return False
 
 if not check_password():
     st.stop()
 
-# --- HEADER AVEC LOGO ---
+# --- HEADER WITH LOGO ---
 col1, col2 = st.columns([1, 5])
 with col1:
     st.image("assets/logo_northsentinel_core.png", width=120)
 with col2:
     st.markdown("<h1 style='color: #F5A623; margin-bottom: 0;'>NorthSentinel CORE</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #AAAAAA; margin-top: 0; font-size: 1.2rem;'>Cockpit d'observation du système en temps réel</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #AAAAAA; margin-top: 0; font-size: 1.2rem;'>Real‑time system monitoring cockpit</p>", unsafe_allow_html=True)
 
 st.divider()
 
-st.divider()
-st.markdown("### 📡 Exécution en direct")
+# --- LIVE EXECUTION SECTION ---
+st.markdown("### 📡 Live Execution")
 
-# --- LECTURE DU STATUT DU RUN EN COURS ---
+# --- READ CURRENT RUN STATUS ---
 RUN_STATUS_FILE = "run_status.json"
 
 if os.path.exists(RUN_STATUS_FILE):
@@ -133,8 +133,7 @@ else:
     run_status = None
 
 if run_status and run_status.get("run_active", False):
-    # Phase en cours
-    phase = "📈 Actions" if run_status.get("phase") == "stocks" else "📊 ETFs"
+    phase = "📈 Stocks" if run_status.get("phase") == "stocks" else "📊 ETFs"
     progress = run_status.get("progress", "0/0")
     current_ticker = run_status.get("current_ticker", "")
     last_action = run_status.get("last_action", "")
@@ -143,11 +142,11 @@ if run_status and run_status.get("run_active", False):
     
     col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
     col1.metric("Phase", f"{phase} ({progress})")
-    col2.metric("Ticker en cours", current_ticker if current_ticker else "—")
-    col3.metric("Statut", last_action)
+    col2.metric("Current Ticker", current_ticker if current_ticker else "—")
+    col3.metric("Status", last_action)
     col4.metric("Score", f"{score}/9" if score > 0 else "—")
     
-    # Barre de progression (si progress est sous forme "X/Y")
+    # Progress bar (if progress is "X/Y" format)
     try:
         prog_parts = progress.split('/')
         if len(prog_parts) == 2:
@@ -157,12 +156,11 @@ if run_status and run_status.get("run_active", False):
     except:
         pass
     
-    st.caption(f"Dernière mise à jour : {timestamp}")
+    st.caption(f"Last update: {timestamp}")
     
-    # Auto‑refresh toutes les 2 secondes si le run est actif
-    if st.button("🔄 Rafraîchir maintenant"):
+    if st.button("🔄 Refresh now"):
         st.rerun()
-    # Refresh automatique via JavaScript (Streamlit le gère)
+    # Auto-refresh via JavaScript (handled by Streamlit)
     st.markdown(
         """
         <meta http-equiv="refresh" content="2">
@@ -170,14 +168,14 @@ if run_status and run_status.get("run_active", False):
         unsafe_allow_html=True
     )
 else:
-    st.info("🔹 Aucun run en cours. Le prochain run est programmé aux horaires habituels (10h, 10h30, 14h55, 15h55).")
-    st.caption("Les mises à jour apparaîtront automatiquement dès le début d’un run.")
+    st.info("🔹 No run in progress. Next run is scheduled at the usual times (10:00, 10:30, 14:55, 15:55).")
+    st.caption("Updates will appear automatically once a run starts.")
 
-# --- FONCTION DE STATUT (SIMPLIFIÉE : 2 ÉTATS) ---
+# --- SYSTEM STATUS FUNCTION (2 states) ---
 def get_system_status():
     now = datetime.now(MONTREAL_TZ)
     
-    # Horaires des runs (heure locale)
+    # Run times (local time)
     run_times = [
         now.replace(hour=10, minute=0, second=0, microsecond=0),
         now.replace(hour=10, minute=30, second=0, microsecond=0),
@@ -185,7 +183,7 @@ def get_system_status():
         now.replace(hour=15, minute=55, second=0, microsecond=0)
     ]
     
-    # Trouver le prochain run
+    # Find next run
     next_run = None
     for rt in run_times:
         if rt > now:
@@ -194,7 +192,7 @@ def get_system_status():
     if next_run is None:
         next_run = run_times[0] + timedelta(days=1)
     
-    # Lire le dernier signal
+    # Read last signal
     last_signal_time = None
     if os.path.exists(SIGNAL_FILE):
         try:
@@ -208,43 +206,43 @@ def get_system_status():
         except:
             pass
     
-    # Déterminer le statut (uniquement 2 états)
+    # Determine status (only 2 states)
     if last_signal_time:
         delta_minutes = (now - last_signal_time).total_seconds() / 60
         if delta_minutes < 3:
-            return "🟢", "Run en cours"
+            return "🟢", "Run in progress"
     
-    # Si pas de run en cours, on affiche le prochain run
+    # If no run in progress, show next run
     delta_next = next_run - now
     hours = delta_next.seconds // 3600
     minutes = (delta_next.seconds % 3600) // 60
-    return "🔵", f"Prochain run dans {hours}h {minutes:02d}min"
+    return "🔵", f"Next run in {hours}h {minutes:02d}min"
 
-# --- BARRE LATÉRALE (PARAMÈTRES + STATUT) ---
+# --- SIDEBAR (PARAMETERS + STATUS) ---
 with st.sidebar:
     status_emoji, status_msg = get_system_status()
-    st.markdown(f"### {status_emoji} Statut")
+    st.markdown(f"### {status_emoji} Status")
     st.markdown(f"*{status_msg}*")
     st.markdown("---")
-    st.markdown("<h3 style='color: #F5A623;'>⚙️ Paramètres de risque</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='color: #F5A623;'>⚙️ Risk Parameters</h3>", unsafe_allow_html=True)
     st.metric("Capital", "1 000 000 $")
-    st.metric("Exposition max / trade", "100 000 $")
-    st.metric("Risque / trade", "2 %")
-    st.metric("SL max", "2.5 %")
-    st.metric("R/R min", "1:2")
+    st.metric("Max exposure / trade", "100 000 $")
+    st.metric("Risk / trade", "2 %")
+    st.metric("Max SL", "2.5 %")
+    st.metric("R/R ratio", "1:2")
     st.markdown("---")
     
-    # --- BOUTON DE DÉCONNEXION (avec classe CSS pour largeur auto) ---
+    # --- SIGN OUT BUTTON ---
     st.markdown('<div class="sidebar-signout">', unsafe_allow_html=True)
-    if st.button("Se déconnecter"):
+    if st.button("Sign out"):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
     
-    st.caption(f"Session ouverte – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
+    st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- LECTURE DES SIGNAUX (pour l'affichage principal) ---
+# --- READ SIGNALS (for main display) ---
 signals = []
 if os.path.exists(SIGNAL_FILE):
     with open(SIGNAL_FILE, "r") as f:
@@ -253,26 +251,26 @@ if os.path.exists(SIGNAL_FILE):
         except:
             signals = []
 else:
-    st.warning("⚠️ Aucun fichier de signaux trouvé.")
+    st.warning("⚠️ No signal file found.")
 
-# --- MÉTRIQUES PRINCIPALES ---
+# --- MAIN METRICS ---
 if signals:
     signals = signals[-10:][::-1]
     total = len(signals)
     avg_score = sum(s.get("score", 0) for s in signals) / total if total > 0 else 0
     
     col_met1, col_met2, col_met3, col_met4 = st.columns(4)
-    col_met1.metric("📊 Signaux récents", total)
-    col_met2.metric("⭐ Score moyen", f"{avg_score:.1f}/9" if avg_score > 0 else "N/A")
-    col_met3.metric("📈 Meilleur score", max([s.get("score", 0) for s in signals]) if signals else "N/A")
-    col_met4.metric("🔄 Dernier signal", signals[0].get("ticker", "N/A") if signals else "N/A")
+    col_met1.metric("📊 Recent signals", total)
+    col_met2.metric("⭐ Average score", f"{avg_score:.1f}/9" if avg_score > 0 else "N/A")
+    col_met3.metric("📈 Best score", max([s.get("score", 0) for s in signals]) if signals else "N/A")
+    col_met4.metric("🔄 Last signal", signals[0].get("ticker", "N/A") if signals else "N/A")
 else:
-    st.info("Aucun signal sauvegardé pour le moment. Les signaux apparaîtront après la première exécution du script Core.")
+    st.info("No signals saved yet. Signals will appear after the first Core script execution.")
 
 st.divider()
 
-# --- TABLEAU DES SIGNAUX ---
-st.markdown("### 📋 Derniers setups")
+# --- SIGNALS TABLE ---
+st.markdown("### 📋 Latest setups")
 
 if signals:
     data = []
@@ -301,29 +299,29 @@ if signals:
     st.dataframe(styled_df, use_container_width=True, height=400)
 
     st.markdown("---")
-    st.markdown("### 🔍 Détail du dernier signal")
+    st.markdown("### 🔍 Last signal details")
     last = signals[0]
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Ticker", last.get("ticker", "N/A"))
         st.metric("Type", last.get("type", "STOCK"))
     with col2:
-        st.metric("Prix d'entrée", f"${last.get('entry_price', 0):.2f}")
+        st.metric("Entry Price", f"${last.get('entry_price', 0):.2f}")
         st.metric("Score", f"{last.get('score', 0)}/9" if last.get("type")=="STOCK" else f"{last.get('score', 0)}/5")
     with col3:
         st.metric("GAP", f"{last.get('gap', 0):.1f}%")
         st.metric("Trailing Stop", f"{last.get('trail_percent', 0):.2f}%")
     if last.get("cap_category"):
-        st.caption(f"Capitalisation : {last.get('cap_category')}")
+        st.caption(f"Capitalization: {last.get('cap_category')}")
     if last.get("market_bias"):
-        st.caption(f"Biais : {last.get('market_bias')}")
+        st.caption(f"Market bias: {last.get('market_bias')}")
 else:
-    st.info("En attente des premiers signaux...")
+    st.info("Awaiting the first signals...")
 
 st.divider()
 
-# --- SECTION LOGS ---
-st.markdown("### 📋 Logs des runs")
+# --- LOGS SECTION ---
+st.markdown("### 📋 Run logs")
 
 if os.path.exists(LOG_FILE):
     try:
@@ -333,14 +331,14 @@ if os.path.exists(LOG_FILE):
                 log_lines = log_lines[-50:]
             log_text = "".join(log_lines)
             st.code(log_text, language="log", line_numbers=False)
-            st.caption(f"Affichage des {len(log_lines)} dernières lignes du fichier {LOG_FILE}")
+            st.caption(f"Showing last {len(log_lines)} lines from {LOG_FILE}")
     except Exception as e:
-        st.error(f"Erreur lors de la lecture du fichier de log : {e}")
+        st.error(f"Error reading log file: {e}")
 else:
-    st.info("📭 Aucun log disponible pour le moment. Les logs apparaîtront après la première exécution du script Core.")
-    st.caption("Astuce : redirige la sortie du script Core vers un fichier `core.log` pour voir les logs ici.")
+    st.info("📭 No logs available yet. Logs will appear after the first Core script execution.")
+    st.caption("Tip: redirect Core script output to `core.log` to see logs here.")
 
-# --- PIED DE PAGE ---
+# --- FOOTER ---
 st.divider()
 st.markdown(
     "<p style='text-align: center; color: #666; font-size: 0.9rem;'>NorthSentinel CORE – Cockpit v2.0 – July, 2026 © NorthSentinel Trading</p>",
