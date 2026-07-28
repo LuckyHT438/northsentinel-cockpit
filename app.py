@@ -220,13 +220,12 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- TABLEAU DES SIGNAUX (sans métriques, sans index, sans couleurs de score) ---
+# --- TABLEAU DES SIGNAUX (METRIQUES SUPPRIMEES) ---
 signals = fetch_signals()
 
-if signals and isinstance(signals, list) and len(signals) > 0:
-    st.markdown("### 📋 Latest setups")
+st.markdown("### 📋 Latest setups")
 
-    # Construction du DataFrame sans l'index
+if signals and isinstance(signals, list) and len(signals) > 0:
     data = []
     for s in signals:
         data.append({
@@ -241,24 +240,18 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         })
     df = pd.DataFrame(data)
 
-    # Affichage sans index et sans couleur de fond
-    st.dataframe(
-        df,
-        use_container_width=True,
-        height=400,
-        hide_index=True,  # Supprime la colonne d'index
-        column_config={
-            "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-            "Type": st.column_config.TextColumn("Type", width="small"),
-            "Entry": st.column_config.TextColumn("Entry", width="small"),
-            "Score": st.column_config.NumberColumn("Score", width="small"),
-            "Gap": st.column_config.TextColumn("Gap", width="small"),
-            "Vol Ratio": st.column_config.TextColumn("Vol Ratio", width="small"),
-            "Trail": st.column_config.TextColumn("Trail", width="small"),
-            "Timestamp": st.column_config.TextColumn("Timestamp", width="medium")
-        }
-    )
+    # --- STYLE PROFESSIONNEL (sans couleur sur Score) ---
+    styled_df = df.style.set_table_styles([
+        {'selector': 'thead tr th', 'props': [('background-color', '#2a2a2a'), ('color', 'white'), ('font-weight', 'bold'), ('text-align', 'center')]},
+        {'selector': 'tbody tr:nth-child(even)', 'props': [('background-color', '#1e1e1e')]},
+        {'selector': 'tbody tr:nth-child(odd)', 'props': [('background-color', '#262626')]},
+        {'selector': 'td', 'props': [('padding', '8px'), ('border', '1px solid #444'), ('text-align', 'center')]},
+        {'selector': 'th', 'props': [('padding', '8px'), ('border', '1px solid #444'), ('text-align', 'center')]}
+    ]).hide(axis='index')  # cache l'index (colonne numérotée)
 
+    st.dataframe(styled_df, use_container_width=True, height=400)
+
+    # --- Détail du dernier signal (conservé) ---
     st.markdown("---")
     st.markdown("### 🔍 Last signal details")
     last = signals[0]
