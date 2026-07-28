@@ -22,7 +22,7 @@ st.set_page_config(
     page_title="NorthSentinel CORE",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # --- CSS ---
@@ -43,10 +43,7 @@ st.markdown(
             padding: 0.5rem 1rem !important;
             font-size: 1rem !important;
         }
-        .stButton button:hover {
-            background-color: #e0951a !important;
-            color: #0E1117 !important;
-        }
+        .stButton button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
         .sidebar-signout button {
             font-weight: bold !important;
             background-color: #F5A623 !important;
@@ -57,9 +54,13 @@ st.markdown(
             font-size: 0.9rem !important;
             width: auto !important;
         }
-        .sidebar-signout button:hover {
-            background-color: #e0951a !important;
-            color: #0E1117 !important;
+        .sidebar-signout button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
+        /* Supprimer les bordures du tableau */
+        .dataframe {
+            border: none !important;
+        }
+        .dataframe th, .dataframe td {
+            border: none !important;
         }
     </style>
     """,
@@ -205,11 +206,11 @@ def get_system_status():
     minutes = (delta_next.seconds % 3600) // 60
     return "🔵", f"Next run in {hours}h {minutes:02d}min"
 
-# --- SIDEBAR (RESTAURÉE) ---
+# --- SIDEBAR ---
 with st.sidebar:
     status_emoji, status_msg = get_system_status()
     st.markdown(f"### {status_emoji} Status")
-    st.markdown(f"*{status_msg}*")   # remis en italique comme avant
+    st.markdown(f"*{status_msg}*")
     st.markdown("---")
     st.markdown("<h3 style='color: #F5A623;'>⚙️ Risk Parameters</h3>", unsafe_allow_html=True)
     st.metric("Capital", "1 000 000 $")
@@ -226,12 +227,13 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- TABLEAU DES SIGNAUX (corrigé : un seul bloc, pas de duplication) ---
+# --- TABLEAU DES SIGNAUX (uniquement) ---
 st.markdown("### 📋 Latest setups")
 
 signals = fetch_signals()
 
 if signals and isinstance(signals, list) and len(signals) > 0:
+    # Construction du DataFrame
     data = []
     for s in signals:
         data.append({
@@ -242,57 +244,30 @@ if signals and isinstance(signals, list) and len(signals) > 0:
             "Gap": f"{s.get('gap', 0):.1f}%",
             "Vol Ratio": f"{s.get('vol_ratio', 0):.1f}x",
             "Trail": f"{s.get('trail_percent', 0):.2f}%",
-            "Timestamp": s.get("timestamp", "N/A")
+            "Timestamp": s.get("timestamp", "N/A"),
+            "Cap": s.get("cap_category", "N/A"),
+            "Bias": s.get("market_bias", "N/A")
         })
     df = pd.DataFrame(data)
 
-    styled_df = (
-        df.style
-        .set_properties(**{'text-align': 'left', 'padding': '8px'})
-        .set_properties(subset=['Score'], **{'text-align': 'left'})
-        .set_table_styles([
-            {'selector': 'table', 'props': [('border-collapse', 'collapse')]},
-            {'selector': 'th', 'props': [('border', 'none'),
-                                         ('text-align', 'left'),
-                                         ('background-color', '#2a2a2a'),
-                                         ('color', 'white'),
-                                         ('font-weight', 'bold')]},
-            {'selector': 'td', 'props': [('border', 'none')]},
-            {'selector': 'tbody tr:nth-child(even)', 'props': [('background-color', '#1e1e1e')]},
-            {'selector': 'tbody tr:nth-child(odd)', 'props': [('background-color', '#262626')]}
-        ])
-        .hide(axis='index')
-    )
+    # Style : pas de bordure, pas d'index, en-tête clair
+    styled_df = df.style.set_table_styles([
+        {'selector': 'thead tr th', 'props': [('background-color', '#2a2a2a'), ('color', 'white'), ('font-weight', 'bold'), ('text-align', 'center')]},
+        {'selector': 'tbody tr:nth-child(even)', 'props': [('background-color', '#1e1e1e')]},
+        {'selector': 'tbody tr:nth-child(odd)', 'props': [('background-color', '#262626')]},
+        {'selector': 'td', 'props': [('padding', '8px'), ('text-align', 'center')]},
+        {'selector': 'th', 'props': [('padding', '8px'), ('text-align', 'center')]}
+    ]).hide(axis='index')
 
     st.dataframe(styled_df, use_container_width=True, height=400)
 
-    # --- DÉTAIL DU DERNIER SIGNAL (UNIQUEMENT SI DES SIGNAUX EXISTENT) ---
-    st.markdown("---")
-    st.markdown("### 🔍 Last signal details")
-    last = signals[-1]   # le plus récent est à la fin
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Ticker", last.get("ticker", "N/A"))
-        st.metric("Type", last.get("type", "STOCK"))
-    with col2:
-        st.metric("Entry Price", f"${last.get('entry_price', 0):.2f}")
-        st.metric("Score", f"{last.get('score', 0)}/9" if last.get("type")=="STOCK" else f"{last.get('score', 0)}/5")
-    with col3:
-        st.metric("GAP", f"{last.get('gap', 0):.1f}%")
-        st.metric("Trailing Stop", f"{last.get('trail_percent', 0):.2f}%")
-    if last.get("cap_category"):
-        st.caption(f"Capitalization: {last.get('cap_category')}")
-    if last.get("market_bias"):
-        st.caption(f"Market bias: {last.get('market_bias')}")
-
 else:
-    # Cas où il n'y a pas de signaux
     st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
     st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
 
 st.divider()
 
-# --- LOGS SECTION (RESTAURÉE) ---
+# --- LOGS SECTION ---
 st.markdown("### 📋 Run logs")
 if os.path.exists(LOG_FILE):
     try:
