@@ -55,14 +55,12 @@ st.markdown(
             width: auto !important;
         }
         .sidebar-signout button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
-        /* Supprimer les bordures des tableaux Streamlit */
+
+        /* --- SUPPRESSION DES BORDURES DES DATAFRAMES --- */
         .stDataFrame {
             border: none !important;
         }
-        .stDataFrame table {
-            border-collapse: collapse !important;
-        }
-        .stDataFrame th, .stDataFrame td {
+        .stDataFrame td, .stDataFrame th {
             border: none !important;
         }
         .stDataFrame th {
@@ -233,14 +231,13 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- LECTURE DES SIGNAUX ---
-signals = fetch_signals()
-
 # --- LATEST SETUPS (TABLEAU SANS BORDURES) ---
 st.markdown("### 📋 Latest setups")
 
+signals = fetch_signals()
+
 if signals and isinstance(signals, list) and len(signals) > 0:
-    # Préparer les données pour le tableau principal
+    # Préparer les données
     data = []
     for s in signals:
         data.append({
@@ -251,40 +248,11 @@ if signals and isinstance(signals, list) and len(signals) > 0:
             "Market Bias": s.get("market_bias", "N/A"),
             "Run Time": s.get("timestamp", "N/A")
         })
-    df_all = pd.DataFrame(data)
+    df_latest = pd.DataFrame(data)
 
-    # Afficher le tableau complet sans bordures
+    # Afficher le tableau sans bordures avec Score aligné à gauche
     st.dataframe(
-        df_all,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-            "Score": st.column_config.NumberColumn("Score", width="small", alignment="left"),  # Score aligné à gauche
-            "Gap": st.column_config.TextColumn("Gap", width="small"),
-            "Vol Ratio": st.column_config.TextColumn("Vol Ratio", width="small"),
-            "Market Bias": st.column_config.TextColumn("Market Bias", width="medium"),
-            "Run Time": st.column_config.TextColumn("Run Time", width="medium")
-        }
-    )
-
-    st.markdown("---")
-    st.markdown("### 🔍 Last signal details")
-
-    # --- DERNIER SIGNAL (TABLEAU 1 LIGNE) ---
-    last = signals[-1]  # dernier signal ajouté (le plus récent)
-    data_last = [{
-        "Ticker": last.get("ticker", "N/A"),
-        "Score": last.get("score", 0),
-        "Gap": f"{last.get('gap', 0):.1f}%",
-        "Vol Ratio": f"{last.get('vol_ratio', 0):.1f}x",
-        "Market Bias": last.get("market_bias", "N/A"),
-        "Run Time": last.get("timestamp", "N/A")
-    }]
-    df_last = pd.DataFrame(data_last)
-
-    st.dataframe(
-        df_last,
+        df_latest,
         use_container_width=True,
         hide_index=True,
         column_config={
@@ -294,6 +262,39 @@ if signals and isinstance(signals, list) and len(signals) > 0:
             "Vol Ratio": st.column_config.TextColumn("Vol Ratio", width="small"),
             "Market Bias": st.column_config.TextColumn("Market Bias", width="medium"),
             "Run Time": st.column_config.TextColumn("Run Time", width="medium")
+        }
+    )
+
+    # --- LAST SIGNAL DETAILS (TABLEAU HARMONISÉ) ---
+    st.markdown("---")
+    st.markdown("### 🔍 Last signal details")
+    last = signals[-1]
+    # Créer un petit tableau avec une seule ligne pour les détails
+    detail_data = [{
+        "Ticker": last.get("ticker", "N/A"),
+        "Type": last.get("type", "STOCK"),
+        "Entry": f"${last.get('entry_price', 0):.2f}",
+        "Score": last.get("score", 0),
+        "Gap": f"{last.get('gap', 0):.1f}%",
+        "Trailing Stop": f"{last.get('trail_percent', 0):.2f}%",
+        "Cap": last.get("cap_category", "N/A"),
+        "Market Bias": last.get("market_bias", "N/A")
+    }]
+    df_detail = pd.DataFrame(detail_data)
+
+    st.dataframe(
+        df_detail,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Ticker": st.column_config.TextColumn("Ticker", width="small"),
+            "Type": st.column_config.TextColumn("Type", width="small"),
+            "Entry": st.column_config.TextColumn("Entry", width="small"),
+            "Score": st.column_config.NumberColumn("Score", width="small", alignment="left"),
+            "Gap": st.column_config.TextColumn("Gap", width="small"),
+            "Trailing Stop": st.column_config.TextColumn("Trailing Stop", width="small"),
+            "Cap": st.column_config.TextColumn("Cap", width="small"),
+            "Market Bias": st.column_config.TextColumn("Market Bias", width="medium")
         }
     )
 
