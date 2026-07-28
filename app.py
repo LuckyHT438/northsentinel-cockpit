@@ -48,7 +48,7 @@ st.markdown(
         [data-testid="stMetricLabel"] {
             font-size: 0.8rem !important;
         }
-        * Titres des métriques en orange dans la sidebar */
+        /* Titres des métriques en orange dans la sidebar */
         section[data-testid="stSidebar"] [data-testid="stMetricLabel"] {
             color: #F5A623 !important;
         }
