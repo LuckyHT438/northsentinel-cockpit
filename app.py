@@ -90,13 +90,19 @@ with col2:
 st.divider()
 
 # --- FONCTIONS DE LECTURE ---
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=5)  # cache très court (5s) pour les tests
 def fetch_signals():
     try:
         r = requests.get(SIGNAL_FILE_URL, timeout=5)
         if r.status_code == 200:
-            return r.json()
-        return []
+            data = r.json()
+            # Vérifier que c'est une liste non vide
+            if isinstance(data, list) and len(data) > 0:
+                return data
+            else:
+                return []
+        else:
+            return []
     except:
         return []
 
@@ -109,7 +115,7 @@ def fetch_run_status():
     except:
         return None
 
-# --- LIVE EXECUTION SECTION (auto‑refresh NON bloquant) ---
+# --- LIVE EXECUTION SECTION ---
 st.markdown("### 📡 Live Execution")
 
 run_status = fetch_run_status()
@@ -139,17 +145,31 @@ if run_status and run_status.get("run_active", False):
     
     st.caption(f"Last update: {timestamp}")
     st.caption("🔄 Auto‑refresh: 3s")
-    # Refresh toutes les 3 secondes pendant un run
     st.markdown('<meta http-equiv="refresh" content="3">', unsafe_allow_html=True)
 else:
     st.info("🔹 No run in progress. Next run is scheduled at the usual times (10:00, 10:30, 14:55, 15:55).")
     st.caption("🔄 Auto‑refresh: 30s (checking for new signals)")
-    # Refresh toutes les 30 secondes entre les runs
     st.markdown('<meta http-equiv="refresh" content="30">', unsafe_allow_html=True)
 
 st.divider()
 
-# --- SYSTEM STATUS FUNCTION (2 états) ---
+# --- BOUTON DE DÉBOGAGE ---
+with st.expander("🔧 Debug tools"):
+    if st.button("🐞 Force refresh cache (clear)"):
+        st.cache_data.clear()
+        st.rerun()
+    
+    if st.button("🐞 Show raw content of core_signals_today.json"):
+        try:
+            r = requests.get(SIGNAL_FILE_URL)
+            if r.status_code == 200:
+                st.code(r.text, language="json")
+            else:
+                st.error(f"HTTP {r.status_code}")
+        except Exception as e:
+            st.error(f"Erreur : {e}")
+
+# --- SYSTEM STATUS FUNCTION ---
 def get_system_status():
     now = datetime.now(MONTREAL_TZ)
     run_times = [
@@ -221,6 +241,7 @@ if signals and isinstance(signals, list) and len(signals) > 0:
     col_met4.metric("🔄 Last signal", signals[0].get("ticker", "N/A") if signals else "N/A")
 else:
     st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
+    st.caption("💡 Si un signal a été généré et n'apparaît pas, utilisez le bouton 'Force refresh cache' dans la section Debug ci‑dessous.")
 
 st.divider()
 
