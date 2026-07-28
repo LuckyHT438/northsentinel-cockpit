@@ -74,7 +74,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- CSS (suppression des bordures) ---
+# --- CSS ---
 st.markdown(
     """
     <style>
@@ -105,7 +105,6 @@ st.markdown(
         }
         .sidebar-signout button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
 
-        /* Supprimer les bordures des dataframes */
         .stDataFrame {
             border: none !important;
         }
@@ -152,7 +151,7 @@ with col2:
 
 st.divider()
 
-# --- FONCTIONS DE LECTURE (avec API GitHub) ---
+# --- FONCTIONS DE LECTURE ---
 @st.cache_data(ttl=10)
 def fetch_signals():
     token = st.secrets.get("GITHUB_TOKEN", "")
@@ -187,7 +186,7 @@ def fetch_run_status():
     except:
         return None
 
-# --- AUTO-REFRESH INTELLIGENT ---
+# --- AUTO-REFRESH ---
 run_status = fetch_run_status()
 run_active = run_status and run_status.get("run_active", False)
 
@@ -196,7 +195,7 @@ if run_active:
 else:
     st_autorefresh(interval=30000, key="idle_refresh")
 
-# --- LIVE EXECUTION (corrigé pour gérer "initialisation") ---
+# --- LIVE EXECUTION ---
 st.markdown("### 📡 Live Execution")
 
 if run_active:
@@ -207,7 +206,6 @@ if run_active:
     score = run_status.get("current_score", 0)
     timestamp = run_status.get("timestamp", "")
 
-    # Déterminer le libellé de la phase
     if phase == "initialisation":
         phase_label = "🔄 Initialisation"
     elif phase == "stocks":
@@ -223,7 +221,6 @@ if run_active:
     col3.metric("Status", last_action)
     col4.metric("Score", f"{score}/9" if score > 0 else "—")
 
-    # Barre de progression (gère le cas total=0)
     try:
         prog_parts = progress.split('/')
         if len(prog_parts) == 2:
@@ -232,7 +229,7 @@ if run_active:
             if total > 0:
                 st.progress(current / total)
             else:
-                st.progress(0.0)  # total=0, progression à 0%
+                st.progress(0.0)
     except:
         pass
 
@@ -301,7 +298,7 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- LATEST SETUPS (TABLEAU COMPLET) ---
+# --- LATEST SETUPS ---
 st.markdown("### 📋 Latest setups")
 
 signals = fetch_signals()
@@ -349,7 +346,7 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         }
     )
 
-    # --- LAST SIGNAL DETAILS (tableau avec les autres métriques) ---
+    # --- LAST SIGNAL DETAILS (réintégrée) ---
     st.markdown("---")
     st.markdown("### 🔍 Last signal details")
     last = signals[-1]
