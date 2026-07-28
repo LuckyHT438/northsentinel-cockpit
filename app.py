@@ -197,32 +197,46 @@ if run_active:
 else:
     st_autorefresh(interval=30000, key="idle_refresh")
 
-# --- LIVE EXECUTION ---
+# --- LIVE EXECUTION (corrigé pour gérer "initialisation") ---
 st.markdown("### 📡 Live Execution")
 
 if run_active:
-    phase = "📈 Stocks" if run_status.get("phase") == "stocks" else "📊 ETFs"
+    phase = run_status.get("phase", "")
     progress = run_status.get("progress", "0/0")
     current_ticker = run_status.get("current_ticker", "")
     last_action = run_status.get("last_action", "")
     score = run_status.get("current_score", 0)
     timestamp = run_status.get("timestamp", "")
-    
+
+    # Déterminer le libellé de la phase
+    if phase == "initialisation":
+        phase_label = "🔄 Initialisation"
+    elif phase == "stocks":
+        phase_label = "📈 Stocks"
+    elif phase == "etfs":
+        phase_label = "📊 ETFs"
+    else:
+        phase_label = "📡 En cours"
+
     col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
-    col1.metric("Phase", f"{phase} ({progress})")
+    col1.metric("Phase", f"{phase_label} ({progress})")
     col2.metric("Current Ticker", current_ticker if current_ticker else "—")
     col3.metric("Status", last_action)
     col4.metric("Score", f"{score}/9" if score > 0 else "—")
-    
+
+    # Barre de progression (gère le cas total=0)
     try:
         prog_parts = progress.split('/')
         if len(prog_parts) == 2:
             current = int(prog_parts[0])
             total = int(prog_parts[1])
-            st.progress(current / total if total > 0 else 0)
+            if total > 0:
+                st.progress(current / total)
+            else:
+                st.progress(0.0)  # total=0, progression à 0%
     except:
         pass
-    
+
     st.caption(f"Last update: {timestamp}")
     st.caption("🔄 Auto‑refresh: 3s")
 else:
