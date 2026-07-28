@@ -6,6 +6,7 @@ import pandas as pd
 import pytz
 import requests
 import base64
+from streamlit_autorefresh import st_autorefresh  # <<< NOUVEAU
 
 # --- MONTREAL TIMEZONE ---
 MONTREAL_TZ = pytz.timezone('America/Toronto')
@@ -21,7 +22,7 @@ st.set_page_config(
     page_title="NorthSentinel CORE",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="collapsed"  # On garde la sidebar mais on peut la réduire
+    initial_sidebar_state="collapsed"
 )
 
 # --- CSS ---
@@ -91,12 +92,11 @@ with col2:
 
 st.divider()
 
-# --- FONCTIONS DE LECTURE AVEC TOKEN ---
-@st.cache_data(ttl=15)
+# --- FONCTIONS DE LECTURE ---
+@st.cache_data(ttl=10)
 def fetch_signals():
     token = st.secrets.get("GITHUB_TOKEN", "")
     if not token:
-        st.error("🚨 GITHUB_TOKEN manquant.")
         return []
     try:
         url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_PATH}"
@@ -107,10 +107,7 @@ def fetch_signals():
             content = base64.b64decode(data["content"]).decode("utf-8")
             signals = json.loads(content)
             return signals if isinstance(signals, list) else []
-        elif r.status_code == 404:
-            return []
-        else:
-            return []
+        return []
     except:
         return []
 
@@ -123,18 +120,17 @@ def fetch_run_status():
     except:
         return None
 
-# --- BOUTON DE RAFFRAÎCHISSEMENT MANUEL ---
-col_refresh, _ = st.columns([1, 5])
-with col_refresh:
-    if st.button("🔄 Refresh signals now"):
-        st.cache_data.clear()
-        st.rerun()
+# --- AUTO-REFRESH INTELLIGENT ---
+run_status = fetch_run_status()
+run_active = run_status and run_status.get("run_active", False)
+
+if run_active:
+    st_autorefresh(interval=3000, key="live_refresh")   # 3s
+else:
+    st_autorefresh(interval=30000, key="idle_refresh")  # 30s
 
 # --- LIVE EXECUTION ---
 st.markdown("### 📡 Live Execution")
-
-run_status = fetch_run_status()
-run_active = run_status and run_status.get("run_active", False)
 
 if run_active:
     phase = "📈 Stocks" if run_status.get("phase") == "stocks" else "📊 ETFs"
@@ -161,10 +157,9 @@ if run_active:
     
     st.caption(f"Last update: {timestamp}")
     st.caption("🔄 Auto‑refresh: 3s")
-    st.markdown('<meta http-equiv="refresh" content="3">', unsafe_allow_html=True)
 else:
-    st.info("🔹 No run in progress. Click 'Refresh signals now' to check for new signals.")
-    # Pas de refresh automatique en dehors des runs
+    st.info("🔹 No run in progress. Auto‑refresh toutes les 30s pour détecter les nouveaux signaux.")
+    st.caption("🔄 Auto‑refresh: 30s")
 
 st.divider()
 
@@ -287,7 +282,7 @@ if signals and isinstance(signals, list) and len(signals) > 0:
 
 else:
     st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
-    st.caption("💡 Utilisez le bouton 'Refresh signals now' pour forcer le rechargement.")
+    st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
 
 st.divider()
 
