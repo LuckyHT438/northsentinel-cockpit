@@ -19,45 +19,51 @@ LOG_FILE = "core.log"
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
-page_title="NorthSentinel CORE",
-page_icon="📊",
-layout="wide",
-initial_sidebar_state="expanded"
+    page_title="NorthSentinel CORE",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 # --- CSS ---
 st.markdown(
-"""
-<style>
-.css-1d391kg,.css-12oz5g7,.css-1v3fvcr,.css-1v0mbdj { font-size: 0.85rem!important; }
-[data-testid="stMetricValue"] { font-size: 0.95rem!important; }
-[data-testid="stMetricLabel"] { font-size: 0.8rem!important; }
-section[data-testid="stSidebar"] [data-testid="stMetricLabel"] { color: #F5A623!important; }
-.css-1v3fvcr h3 { font-size: 1rem!important; }
-.stButton button {
-font-weight: bold!important;
-background-color: #F5A623!important;
-color: #0E1117!important;
-border: none!important;
-border-radius: 4px!important;
-padding: 0.5rem 1rem!important;
-font-size: 1rem!important;
-}
-.stButton button { background-color: #e0951a!important; color: #0E1117!important; }
-.sidebar-signout button {
-font-weight: bold!important;
-background-color: #F5A623!important;
-color: #0E1117!important;
-border: none!important;
-border-radius: 4px!important;
-padding: 0.5rem 1rem!important;
-font-size: 0.9rem!important;
-width: auto!important;
-}
-.sidebar-signout button { background-color: #e0951a!important; color: #0E1117!important; }
-</style>
-""",
-unsafe_allow_html=True
+    """
+    <style>
+        .css-1d391kg, .css-12oz5g7, .css-1v3fvcr, .css-1v0mbdj { font-size: 0.85rem !important; }
+        [data-testid="stMetricValue"] { font-size: 0.95rem !important; }
+        [data-testid="stMetricLabel"] { font-size: 0.8rem !important; }
+        section[data-testid="stSidebar"] [data-testid="stMetricLabel"] { color: #F5A623 !important; }
+        .css-1v3fvcr h3 { font-size: 1rem !important; }
+        .stButton button {
+            font-weight: bold !important;
+            background-color: #F5A623 !important;
+            color: #0E1117 !important;
+            border: none !important;
+            border-radius: 4px !important;
+            padding: 0.5rem 1rem !important;
+            font-size: 1rem !important;
+        }
+        .stButton button:hover {
+            background-color: #e0951a !important;
+            color: #0E1117 !important;
+        }
+        .sidebar-signout button {
+            font-weight: bold !important;
+            background-color: #F5A623 !important;
+            color: #0E1117 !important;
+            border: none !important;
+            border-radius: 4px !important;
+            padding: 0.5rem 1rem !important;
+            font-size: 0.9rem !important;
+            width: auto !important;
+        }
+        .sidebar-signout button:hover {
+            background-color: #e0951a !important;
+            color: #0E1117 !important;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
 )
 
 # --- AUTHENTIFICATION ---
@@ -139,13 +145,13 @@ if run_active:
     last_action = run_status.get("last_action", "")
     score = run_status.get("current_score", 0)
     timestamp = run_status.get("timestamp", "")
-
+    
     col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
     col1.metric("Phase", f"{phase} ({progress})")
     col2.metric("Current Ticker", current_ticker if current_ticker else "—")
     col3.metric("Status", last_action)
     col4.metric("Score", f"{score}/9" if score > 0 else "—")
-
+    
     try:
         prog_parts = progress.split('/')
         if len(prog_parts) == 2:
@@ -154,7 +160,7 @@ if run_active:
             st.progress(current / total if total > 0 else 0)
     except:
         pass
-
+    
     st.caption(f"Last update: {timestamp}")
     st.caption("🔄 Auto‑refresh: 3s")
 else:
@@ -203,7 +209,7 @@ def get_system_status():
 with st.sidebar:
     status_emoji, status_msg = get_system_status()
     st.markdown(f"### {status_emoji} Status")
-    st.markdown(f"{status_msg}")
+    st.markdown(f"*{status_msg}*")   # remis en italique comme avant
     st.markdown("---")
     st.markdown("<h3 style='color: #F5A623;'>⚙️ Risk Parameters</h3>", unsafe_allow_html=True)
     st.metric("Capital", "1 000 000 $")
@@ -220,7 +226,7 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- TABLEAU DES SIGNAUX MODIFIÉ ---
+# --- TABLEAU DES SIGNAUX (corrigé : un seul bloc, pas de duplication) ---
 st.markdown("### 📋 Latest setups")
 
 signals = fetch_signals()
@@ -240,24 +246,30 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         })
     df = pd.DataFrame(data)
 
-    styled_df = df.style
-    styled_df = styled_df.set_properties(**{'text-align': 'left', 'padding': '8px'})
-    styled_df = styled_df.set_properties(subset=['Score'], **{'text-align': 'left'})
-    styled_df = styled_df.set_table_styles([
-        {'selector': 'table', 'props': [('border-collapse', 'collapse')]},
-        {'selector': 'th', 'props': [('border', 'none'), ('text-align', 'left'), ('background-color', '#2a2a2a'), ('color', 'white'), ('font-weight', 'bold')]},
-        {'selector': 'td', 'props': [('border', 'none')]},
-        {'selector': 'tbody tr:nth-child(even)', 'props': [('background-color', '#1e1e1e')]},
-        {'selector': 'tbody tr:nth-child(odd)', 'props': [('background-color', '#262626')]}
-    ])
-    styled_df = styled_df.hide(axis='index')
+    styled_df = (
+        df.style
+        .set_properties(**{'text-align': 'left', 'padding': '8px'})
+        .set_properties(subset=['Score'], **{'text-align': 'left'})
+        .set_table_styles([
+            {'selector': 'table', 'props': [('border-collapse', 'collapse')]},
+            {'selector': 'th', 'props': [('border', 'none'),
+                                         ('text-align', 'left'),
+                                         ('background-color', '#2a2a2a'),
+                                         ('color', 'white'),
+                                         ('font-weight', 'bold')]},
+            {'selector': 'td', 'props': [('border', 'none')]},
+            {'selector': 'tbody tr:nth-child(even)', 'props': [('background-color', '#1e1e1e')]},
+            {'selector': 'tbody tr:nth-child(odd)', 'props': [('background-color', '#262626')]}
+        ])
+        .hide(axis='index')
+    )
 
     st.dataframe(styled_df, use_container_width=True, height=400)
 
-    # --- DÉTAIL DU DERNIER SIGNAL ---
+    # --- DÉTAIL DU DERNIER SIGNAL (UNIQUEMENT SI DES SIGNAUX EXISTENT) ---
     st.markdown("---")
     st.markdown("### 🔍 Last signal details")
-    last = signals[-1]
+    last = signals[-1]   # le plus récent est à la fin
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Ticker", last.get("ticker", "N/A"))
@@ -274,73 +286,7 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         st.caption(f"Market bias: {last.get('market_bias')}")
 
 else:
-    st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
-    st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
-    
-    # --- DÉTAIL DU DERNIER SIGNAL ---
-    st.markdown("---")
-    st.markdown("### 🔍 Last signal details")
-    last = signals[-1]
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Ticker", last.get("ticker", "N/A"))
-        st.metric("Type", last.get("type", "STOCK"))
-    with col2:
-        st.metric("Entry Price", f"${last.get('entry_price', 0):.2f}")
-        st.metric("Score", f"{last.get('score', 0)}/9" if last.get("type")=="STOCK" else f"{last.get('score', 0)}/5")
-    with col3:
-        st.metric("GAP", f"{last.get('gap', 0):.1f}%")
-        st.metric("Trailing Stop", f"{last.get('trail_percent', 0):.2f}%")
-    if last.get("cap_category"):
-        st.caption(f"Capitalization: {last.get('cap_category')}")
-    if last.get("market_bias"):
-        st.caption(f"Market bias: {last.get('market_bias')}")
-
-else:
-    st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
-    st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
-    
-    # --- DÉTAIL DU DERNIER SIGNAL ---
-    st.markdown("---")
-    st.markdown("### 🔍 Last signal details")
-    last = signals[-1]
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Ticker", last.get("ticker", "N/A"))
-        st.metric("Type", last.get("type", "STOCK"))
-    with col2:
-        st.metric("Entry Price", f"${last.get('entry_price', 0):.2f}")
-        st.metric("Score", f"{last.get('score', 0)}/9" if last.get("type")=="STOCK" else f"{last.get('score', 0)}/5")
-    with col3:
-        st.metric("GAP", f"{last.get('gap', 0):.1f}%")
-        st.metric("Trailing Stop", f"{last.get('trail_percent', 0):.2f}%")
-    if last.get("cap_category"):
-        st.caption(f"Capitalization: {last.get('cap_category')}")
-    if last.get("market_bias"):
-        st.caption(f"Market bias: {last.get('market_bias')}")
-else:
-    st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
-    st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
-    
-    # --- DÉTAIL DU DERNIER SIGNAL (RESTAURÉ) ---
-    st.markdown("---")
-    st.markdown("### 🔍 Last signal details")
-    last = signals[-1]
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Ticker", last.get("ticker", "N/A"))
-        st.metric("Type", last.get("type", "STOCK"))
-    with col2:
-        st.metric("Entry Price", f"${last.get('entry_price', 0):.2f}")
-        st.metric("Score", f"{last.get('score', 0)}/9" if last.get("type")=="STOCK" else f"{last.get('score', 0)}/5")
-    with col3:
-        st.metric("GAP", f"{last.get('gap', 0):.1f}%")
-        st.metric("Trailing Stop", f"{last.get('trail_percent', 0):.2f}%")
-    if last.get("cap_category"):
-        st.caption(f"Capitalization: {last.get('cap_category')}")
-    if last.get("market_bias"):
-        st.caption(f"Market bias: {last.get('market_bias')}")
-else:
+    # Cas où il n'y a pas de signaux
     st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
     st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
 
@@ -352,11 +298,11 @@ if os.path.exists(LOG_FILE):
     try:
         with open(LOG_FILE, "r") as f:
             log_lines = f.readlines()
-        if len(log_lines) > 50:
-            log_lines = log_lines[-50:]
-        log_text = "".join(log_lines)
-        st.code(log_text, language="log", line_numbers=False)
-        st.caption(f"Showing last {len(log_lines)} lines from {LOG_FILE}")
+            if len(log_lines) > 50:
+                log_lines = log_lines[-50:]
+            log_text = "".join(log_lines)
+            st.code(log_text, language="log", line_numbers=False)
+            st.caption(f"Showing last {len(log_lines)} lines from {LOG_FILE}")
     except Exception as e:
         st.error(f"Error reading log file: {e}")
 else:
