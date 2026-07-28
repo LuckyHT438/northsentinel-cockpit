@@ -1,417 +1,23 @@
-# ============================================================
-# NORTHSENTINEL CORE — ESSENTIAL SCALPING & OVERNIGHT SIGNALS
-# ============================================================
-import requests
-import yfinance as yf
-import time
-import random
+import streamlit as st
 import json
-from datetime import datetime, timezone, timedelta, date
-from bs4 import BeautifulSoup
-import re
-import pytz
 import os
-import subprocess
+from datetime import datetime, timedelta
+import pandas as pd
+import pytz
+import requests
 import base64
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+from streamlit_autorefresh import st_autorefresh
 
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
+# --- MONTREAL TIMEZONE ---
 MONTREAL_TZ = pytz.timezone('America/Toronto')
-DATA_REPO_TOKEN = os.environ.get("DATA_REPO_TOKEN")
 
-DATA_REPO_URL = "https://x-access-token:{}@github.com/LuckyHT438/northsentinel-data.git".format(DATA_REPO_TOKEN) if DATA_REPO_TOKEN else None
+# --- FICHIERS (via API GitHub avec token) ---
+GITHUB_REPO = "LuckyHT438/northsentinel-data"
+GITHUB_PATH_SIGNALS = "core_signals_today.json"
+GITHUB_PATH_STATUS = "run_status.json"
+LOG_FILE = "core.log"
 
-# === SEUIL DE SPREAD MAXIMUM (5%) ===
-MAX_SPREAD_PCT = 5.0
-
-# --- AJOUT RUN STATUS : Fichier pour le suivi en direct ---
-RUN_STATUS_FILE = "run_status.json"
-
-def push_signals_to_repo():
-    if not DATA_REPO_TOKEN:
-        print("⚠️ DATA_REPO_TOKEN manquant — impossible de pousser vers le dépôt de données")
-        return False
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    local_file = os.path.join(script_dir, "core_signals_today.json")
-    if not os.path.exists(local_file):
-        print("ℹ️ Aucun fichier local à pousser")
-        return False
-    try:
-        repo_dir = "northsentinel-data"
-        repo_file = os.path.join(repo_dir, "core_signals_today.json")
-        if not os.path.exists(repo_dir):
-            print("📥 Clonage du dépôt de données...")
-            subprocess.run(["git", "clone", DATA_REPO_URL, repo_dir], check=True, capture_output=True)
-        else:
-            os.chdir(repo_dir)
-            subprocess.run(["git", "pull", "origin", "main"], check=True, capture_output=True)
-            os.chdir("..")
-        with open(local_file, 'r') as f:
-            local_signals = json.load(f)
-        repo_signals = []
-        if os.path.exists(repo_file):
-            with open(repo_file, 'r') as f:
-                repo_signals = json.load(f)
-                if not isinstance(repo_signals, list):
-                    repo_signals = []
-        existing_keys = set()
-        for s in repo_signals:
-            key = (s.get('ticker'), s.get('type'), s.get('timestamp'))
-            existing_keys.add(key)
-        for s in local_signals:
-            key = (s.get('ticker'), s.get('type'), s.get('timestamp'))
-            if key not in existing_keys:
-                repo_signals.append(s)
-                existing_keys.add(key)
-        with open(repo_file, 'w') as f:
-            json.dump(repo_signals, f, indent=2)
-        os.chdir(repo_dir)
-        subprocess.run(["git", "config", "user.name", "NorthSentinel Bot"], check=True)
-        subprocess.run(["git", "config", "user.email", "bot@northsentinel.com"], check=True)
-        subprocess.run(["git", "add", "core_signals_today.json"], check=True)
-        subprocess.run(["git", "commit", "-m", f"Mise à jour des signaux Core - {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M')}"], check=True, capture_output=True)
-        subprocess.run(["git", "push", "origin", "main"], check=True, capture_output=True)
-        os.chdir("..")
-        print(f"✅ Signaux fusionnés et poussés vers le dépôt (total: {len(repo_signals)})")
-        return True
-    except subprocess.CalledProcessError as e:
-        print(f"⚠️ Erreur Git: {e.stderr.decode() if e.stderr else e}")
-        os.chdir(script_dir)
-        return False
-    except Exception as e:
-        print(f"❌ Erreur lors du push: {e}")
-        return False
-
-AUTH_SHEET_URL = os.environ.get("AUTH_SHEET_URL", "")
-
-def get_authorized_chat_ids():
-    if not AUTH_SHEET_URL:
-        print("⚠️ AUTH_SHEET_URL missing — sending to yourself only")
-        fallback = os.environ.get("TELEGRAM_CHAT_ID", "")
-        return [int(fallback)] if fallback.isdigit() else []
-    try:
-        r = requests.get(AUTH_SHEET_URL, timeout=5)
-        if r.status_code != 200:
-            print(f"⚠️ Failed to fetch auth sheet: {r.status_code}")
-            return []
-        lines = r.text.strip().split('\n')
-        chat_ids = []
-        today = datetime.now(MONTREAL_TZ).date()
-        for line in lines[1:]:
-            cols = line.split(',')
-            if len(cols) >= 8:
-                chat_id = cols[2].strip()
-                status = cols[5].strip()
-                start_str = cols[6].strip()
-                end_str = cols[7].strip()
-                if status == 'Active' and chat_id.isdigit():
-                    start_date = None
-                    if start_str:
-                        for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d"]:
-                            try:
-                                start_date = datetime.strptime(start_str, fmt).date()
-                                break
-                            except:
-                                pass
-                    end_date = None
-                    if end_str:
-                        for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%Y/%m/%d"]:
-                            try:
-                                end_date = datetime.strptime(end_str, fmt).date()
-                                break
-                            except:
-                                pass
-                    if start_date and today < start_date:
-                        continue
-                    if end_date and today > end_date:
-                        continue
-                    chat_ids.append(int(chat_id))
-        print(f"✅ {len(chat_ids)} authorized Chat ID(s) loaded")
-        return chat_ids
-    except Exception as e:
-        print(f"❌ Auth sheet error: {e}")
-        return []
-
-CAPITAL = 1_000_000
-RISK_PER_TRADE = 0.02
-MAX_CAPITAL_PER_POSITION = 0.10
-SCORE_MIN_ACTIONS = 5
-SCORE_MIN_OVERNIGHT_ACTIONS = 6
-PRICE_MAX_ACTIONS = 666
-PRICE_MIN_ACTIONS = 2.00
-SCORE_MIN_FNB = 5
-SCORE_MIN_OVERNIGHT_FNB = 5
-PRICE_MAX_FNB = 9999
-
-def _build_us_holidays(year):
-    us_holidays = set()
-    us_holidays.add(date(year, 1, 1))
-    us_holidays.add(date(year, 6, 19))
-    us_holidays.add(date(year, 7, 4))
-    us_holidays.add(date(year, 12, 25))
-    mlk = date(year, 1, 1)
-    while mlk.weekday() != 0:
-        mlk = date(year, 1, mlk.day + 1)
-    mlk = date(year, 1, mlk.day + 14)
-    us_holidays.add(mlk)
-    pres = date(year, 2, 1)
-    while pres.weekday() != 0:
-        pres = date(year, 2, pres.day + 1)
-    pres = date(year, 2, pres.day + 14)
-    us_holidays.add(pres)
-    mem = date(year, 5, 31)
-    while mem.weekday() != 0:
-        mem = date(year, 5, mem.day - 1)
-    us_holidays.add(mem)
-    lab = date(year, 9, 1)
-    while lab.weekday() != 0:
-        lab = date(year, 9, lab.day + 1)
-    us_holidays.add(lab)
-    thanks = date(year, 11, 1)
-    while thanks.weekday() != 3:
-        thanks = date(year, 11, thanks.day + 1)
-    thanks = date(year, 11, thanks.day + 21)
-    us_holidays.add(thanks)
-    return us_holidays
-
-def _build_ca_holidays(year):
-    ca_holidays = set()
-    ca_holidays.add(date(year, 1, 1))
-    ca_holidays.add(date(year, 7, 1))
-    ca_holidays.add(date(year, 12, 25))
-    ca_holidays.add(date(year, 12, 26))
-    fam = date(year, 2, 1)
-    while fam.weekday() != 0:
-        fam = date(year, 2, fam.day + 1)
-    fam = date(year, 2, fam.day + 14)
-    ca_holidays.add(fam)
-    a = year % 19
-    b = year // 100
-    c = year % 100
-    d = b // 4
-    e = b % 4
-    f = (b + 8) // 25
-    g = (b - f + 1) // 3
-    h = (19 * a + b - d - g + 15) % 30
-    i = c // 4
-    k = c % 4
-    l = (32 + 2 * e + 2 * i - h - k) % 7
-    m = (a + 11 * h + 22 * l) // 451
-    month = (h + l - 7 * m + 114) // 31
-    day = ((h + l - 7 * m + 114) % 31) + 1
-    easter = date(year, month, day)
-    good_friday = easter - timedelta(days=2)
-    ca_holidays.add(good_friday)
-    vic = date(year, 5, 24)
-    while vic.weekday() != 0:
-        vic = date(year, 5, vic.day - 1)
-    ca_holidays.add(vic)
-    civ = date(year, 8, 1)
-    while civ.weekday() != 0:
-        civ = date(year, 8, civ.day + 1)
-    ca_holidays.add(civ)
-    lab = date(year, 9, 1)
-    while lab.weekday() != 0:
-        lab = date(year, 9, lab.day + 1)
-    ca_holidays.add(lab)
-    ca_thanks = date(year, 10, 1)
-    while ca_thanks.weekday() != 0:
-        ca_thanks = date(year, 10, ca_thanks.day + 1)
-    ca_thanks = date(year, 10, ca_thanks.day + 7)
-    ca_holidays.add(ca_thanks)
-    return ca_holidays
-
-def _adjust_weekend(d):
-    if d.weekday() == 5:
-        return d - timedelta(days=1)
-    elif d.weekday() == 6:
-        return d + timedelta(days=1)
-    return d
-
-def is_us_market_closed(check_date=None):
-    if check_date is None:
-        check_date = datetime.now(MONTREAL_TZ).date()
-    elif isinstance(check_date, datetime):
-        check_date = check_date.date()
-    year = check_date.year
-    us_holidays = _build_us_holidays(year)
-    adjusted_us = set()
-    for d in us_holidays:
-        adjusted_us.add(_adjust_weekend(d))
-    return check_date in adjusted_us
-
-def is_ca_market_closed(check_date=None):
-    if check_date is None:
-        check_date = datetime.now(MONTREAL_TZ).date()
-    elif isinstance(check_date, datetime):
-        check_date = check_date.date()
-    year = check_date.year
-    ca_holidays = _build_ca_holidays(year)
-    adjusted_ca = set()
-    for d in ca_holidays:
-        adjusted_ca.add(_adjust_weekend(d))
-    return check_date in adjusted_ca
-
-def is_market_closed(check_date=None):
-    if check_date is None:
-        check_date = datetime.now(MONTREAL_TZ).date()
-    elif isinstance(check_date, datetime):
-        check_date = check_date.date()
-    year = check_date.year
-    early_close_dates = {date(year, 11, 28), date(year, 12, 24), date(year, 12, 31)}
-    if check_date in early_close_dates:
-        return 'early_close'
-    us_closed = is_us_market_closed(check_date)
-    ca_closed = is_ca_market_closed(check_date)
-    if us_closed and ca_closed:
-        return 'closed'
-    elif us_closed:
-        return 'us_closed'
-    elif ca_closed:
-        return 'ca_closed'
-    else:
-        return 'open'
-
-def create_session():
-    session = requests.Session()
-    retry = Retry(total=2, backoff_factor=1, status_forcelist=[429, 500, 502, 503, 504])
-    adapter = HTTPAdapter(max_retries=retry)
-    session.mount('https://', adapter)
-    session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-    })
-    return session
-
-HTTP_SESSION = create_session()
-
-canadian_symbols = {
-    "TD.TO", "BMO.TO", "BNS.TO", "NA.TO",
-    "ENB.TO", "SU.TO", "CNQ.TO", "SOBO.TO",
-    "FTS.TO", "AQN.TO", "H.TO", "BEP-UN.TO",
-    "SHOP.TO", "LSPD.TO", "OTEX.TO", "RCI-B.TO",
-    "CAE.TO", "MDA.TO", "BBD-B.TO",
-    "L.TO", "MRU.TO", "CCO.TO", "DOL.TO",
-    "CNR.TO", "CP.TO", "T.TO", "BCE.TO",
-    "BHC.TO", "CSH-UN.TO", "AND.TO",
-    "AEM.TO", "ABX.TO", "WPM.TO",
-    "GRDG.TO", "IFC.TO", "SLF.TO", "GWO.TO",
-    "MG.TO", "RBA.TO", "AC.TO"
-}
-
-def send_telegram(message):
-    if not TELEGRAM_TOKEN:
-        print("⚠️ Telegram token missing")
-        return False
-    chat_ids = get_authorized_chat_ids()
-    if not chat_ids:
-        print("⚠️ No authorized Chat IDs — message not sent")
-        return False
-    for chat_id in chat_ids:
-        try:
-            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-            payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
-            r = requests.post(url, json=payload, timeout=10)
-            if r.status_code != 200:
-                print(f"❌ Failed for {chat_id}: {r.status_code}")
-        except Exception as e:
-            print(f"❌ Error for {chat_id}: {e}")
-            continue
-    return True
-
-def get_exchange_from_info(info):
-    exchange = info.get('exchange', '')
-    exchange_map = {
-        'NMS': 'NASDAQ', 'NGM': 'NASDAQ', 'NCM': 'NASDAQ',
-        'NYQ': 'NYSE', 'NYM': 'NYSE', 'PCX': 'ARCA',
-        'BTS': 'BATS', 'ASE': 'AMEX', 'PSE': 'NYSE ARCA',
-        'TOR': 'TMX', 'TSX': 'TMX', 'TRV': 'TSXV', 'CNQ': 'CSE'
-    }
-    return exchange_map.get(exchange, exchange if exchange else 'US')
-
-# ================= MARCHÉS ET BIAS =================
-MARKET_ETFS_US = {
-    "XLE": "Energy",
-    "XLF": "Financials",
-    "XLV": "Healthcare",
-    "XLI": "Industrials",
-    "XLK": "Technology",
-    "XLY": "Consumer Discretionary",
-    "XLP": "Consumer Staples",
-    "XLB": "Materials",
-    "XLU": "Utilities",
-    "SMH": "Semiconductors",
-    "QQQ": "Nasdaq 100",
-    "SPY": "S&P 500",
-    "IWM": "Russell 2000",
-}
-MARKET_ETFS_CA = {
-    "XIU.TO": "TSX 60",
-    "XGD.TO": "Gold Miners",
-    "XMA.TO": "Materials",
-    "XFN.TO": "Financials",
-    "XUT.TO": "Utilities",
-}
-
-def _get_sector_performance(ticker):
-    try:
-        stock = yf.Ticker(ticker)
-        info = stock.info
-        price = info.get('currentPrice') or info.get('regularMarketPrice')
-        prev_close = info.get('previousClose')
-        if price and prev_close and prev_close > 0:
-            change = (price - prev_close) / prev_close * 100
-            return change
-    except:
-        pass
-    return None
-
-def _get_market_bias(ticker):
-    is_ca = ticker.endswith('.TO')
-    market_etfs = MARKET_ETFS_CA if is_ca else MARKET_ETFS_US
-    performances = {}
-    up_count = 0
-    down_count = 0
-    for etf, name in market_etfs.items():
-        change = _get_sector_performance(etf)
-        if change is not None:
-            performances[name] = {"ticker": etf, "change": change}
-            if change > 0.3:
-                up_count += 1
-            elif change < -0.3:
-                down_count += 1
-    if not performances:
-        return "⚪ Neutral (N/A)"
-    market_label = "CA" if is_ca else "US"
-    if up_count > down_count:
-        return f"🟢 Risk-on ({market_label})"
-    elif down_count > up_count:
-        return f"🔴 Risk-off ({market_label})"
-    else:
-        return f"⚪ Neutral ({market_label})"
-
-def get_global_market_bias():
-    all_etfs = {**MARKET_ETFS_US, **MARKET_ETFS_CA}
-    up_count = 0
-    down_count = 0
-    for ticker, _ in all_etfs.items():
-        change = _get_sector_performance(ticker)
-        if change is not None:
-            if change > 0.3:
-                up_count += 1
-            elif change < -0.3:
-                down_count += 1
-    if up_count == 0 and down_count == 0:
-        return "Neutral"
-    if up_count > down_count:
-        return "Risk-on"
-    elif down_count > up_count:
-        return "Risk-off"
-    else:
-        return "Neutral"
-
+# --- FONCTIONS DE CALCUL (reproduites depuis le Core) ---
 def get_market_bias_adjustment(bias_text):
     if "Risk-on" in bias_text:
         return {"tp": 0.005, "sl": 0.005, "trail": 0.5}
@@ -419,26 +25,6 @@ def get_market_bias_adjustment(bias_text):
         return {"tp": -0.005, "sl": -0.005, "trail": -0.5}
     else:
         return {"tp": 0.0, "sl": 0.0, "trail": 0.0}
-
-def get_market_cap_category(ticker):
-    try:
-        stock = yf.Ticker(ticker)
-        info = stock.info
-        market_cap = info.get('marketCap', 0)
-        if market_cap == 0:
-            return "N/A"
-        elif market_cap < 300_000_000:
-            return "Micro Cap"
-        elif market_cap < 2_000_000_000:
-            return "Small Cap"
-        elif market_cap < 10_000_000_000:
-            return "Mid Cap"
-        elif market_cap < 200_000_000_000:
-            return "Large Cap"
-        else:
-            return "Mega Cap"
-    except:
-        return "N/A"
 
 def get_cap_adjustment(cap_category):
     adjustments = {
@@ -451,36 +37,7 @@ def get_cap_adjustment(cap_category):
     }
     return adjustments.get(cap_category, {"tp": 0.0, "sl": 0.0, "trail": 0.0})
 
-# ---- FONCTIONS AVEC SPREAD ----
-def get_trail_percent(score, is_fnb=False, cap_category="Large Cap", market_bias=None, spread_pct=0.0):
-    if is_fnb:
-        if score >= 5:
-            base = 2.5
-        elif score == 4:
-            base = 3.0
-        elif score == 3:
-            base = 3.5
-        else:
-            base = 4.0
-    else:
-        if score >= 9:
-            base = 2.5
-        elif score == 8:
-            base = 3.0
-        elif score == 7:
-            base = 3.5
-        elif score == 6:
-            base = 4.0
-        elif score == 5:
-            base = 4.5
-        else:
-            base = 5.0
-    cap_adj = get_cap_adjustment(cap_category)
-    bias_adj = get_market_bias_adjustment(market_bias) if market_bias else {"trail": 0.0}
-    spread_adj = spread_pct * 0.5
-    return round(base + cap_adj["trail"] + bias_adj["trail"] + spread_adj, 2)
-
-def get_tp_multiplier(score, gap, post_news=False, cap_category="Large Cap", market_bias=None, spread_pct=0.0):
+def get_tp_multiplier(score, gap, cap_category="Large Cap", market_bias=None, spread_pct=0.0):
     if score < 6:
         if score == 5:
             base = 1.010
@@ -495,25 +52,7 @@ def get_tp_multiplier(score, gap, post_news=False, cap_category="Large Cap", mar
     cap_adj = get_cap_adjustment(cap_category)
     bias_adj = get_market_bias_adjustment(market_bias) if market_bias else {"tp": 0.0}
     spread_adj = spread_pct / 100.0
-    base = round(base + cap_adj["tp"] + bias_adj["tp"] - spread_adj, 3)
-    if post_news:
-        base = round(1.0 + (base - 1.0) * 0.833, 3)
-    return round(base, 3)
-
-def get_fnb_tp_multiplier(score, gap, post_news=False, market_bias=None, spread_pct=0.0):
-    if score < 4:
-        base = 1.005
-    elif gap >= 6:
-        base = 1.015 + (score - 3) * 0.005
-    elif gap >= 3:
-        base = 1.01 + (score - 3) * 0.005
-    else:
-        base = 1.005 + (score - 3) * 0.005
-    bias_adj = get_market_bias_adjustment(market_bias) if market_bias else {"tp": 0.0}
-    spread_adj = spread_pct / 100.0
-    base = round(base + bias_adj["tp"] - spread_adj, 3)
-    if post_news:
-        base = round(1.0 + (base - 1.0) * 0.833, 3)
+    base = base + cap_adj["tp"] + bias_adj["tp"] - spread_adj
     return round(base, 3)
 
 def get_sl_multiplier(score, cap_category="Large Cap", market_bias=None, spread_pct=0.0):
@@ -528,1324 +67,340 @@ def get_sl_multiplier(score, cap_category="Large Cap", market_bias=None, spread_
     spread_adj = spread_pct / 200.0
     return round(base - cap_adj["sl"] - bias_adj["sl"] - spread_adj, 3)
 
-def calculate_quantity(entry_price, stop_price, capital, risk_per_trade, max_capital_per_position):
-    risk_amount = capital * risk_per_trade
-    max_exposure = capital * max_capital_per_position
-    stop_distance = entry_price - stop_price
-    if stop_distance <= 0:
-        return 0
-    qty_risk = int(risk_amount / stop_distance)
-    qty_cap = int(max_exposure / entry_price)
-    return max(0, min(qty_risk, qty_cap))
+# --- PAGE CONFIGURATION ---
+st.set_page_config(
+    page_title="NorthSentinel CORE",
+    page_icon="📊",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
-# ============================================================
-# FONCTION DE GESTION DES RISQUES (MANDAT STRICT AVEC TRAILING CORRIGÉ)
-# ============================================================
-def apply_risk_mandate(tp_mult, sl_mult, trail_pct, min_ratio=2.0, max_tp=5.0, max_sl=2.5, min_sl=0.5):
+# --- CSS (suppression des bordures) ---
+st.markdown(
     """
-    Applique les règles strictes NorthSentinel :
-    - TP ≤ max_tp (%)
-    - SL ≤ max_sl (%)
-    - Ratio R/R ≥ min_ratio (1:2 par défaut)
-    - SL min absolu = min_sl (en dessous -> rejet)
-    - Trailing Stop : doit être plus serré que le SL (pourcentage plus petit)
-      On le limite à 80% du SL, avec un plancher de 0.3% et un plafond de 5%.
-    Retourne (tp_mult, sl_mult, trail_pct) ou (None, None, None) si rejet.
-    """
-    tp_pct = round((tp_mult - 1) * 100, 2)
-    sl_pct = round((1 - sl_mult) * 100, 2)
+    <style>
+        .css-1d391kg, .css-12oz5g7, .css-1v3fvcr, .css-1v0mbdj { font-size: 0.85rem !important; }
+        [data-testid="stMetricValue"] { font-size: 0.95rem !important; }
+        [data-testid="stMetricLabel"] { font-size: 0.8rem !important; }
+        section[data-testid="stSidebar"] [data-testid="stMetricLabel"] { color: #F5A623 !important; }
+        .css-1v3fvcr h3 { font-size: 1rem !important; }
+        .stButton button {
+            font-weight: bold !important;
+            background-color: #F5A623 !important;
+            color: #0E1117 !important;
+            border: none !important;
+            border-radius: 4px !important;
+            padding: 0.5rem 1rem !important;
+            font-size: 1rem !important;
+        }
+        .stButton button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
+        .sidebar-signout button {
+            font-weight: bold !important;
+            background-color: #F5A623 !important;
+            color: #0E1117 !important;
+            border: none !important;
+            border-radius: 4px !important;
+            padding: 0.5rem 1rem !important;
+            font-size: 0.9rem !important;
+            width: auto !important;
+        }
+        .sidebar-signout button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
 
-    # 1. Plafonds
-    tp_pct = min(tp_pct, max_tp)
-    sl_pct = min(sl_pct, max_sl)
+        /* Supprimer les bordures des dataframes */
+        .stDataFrame {
+            border: none !important;
+        }
+        .stDataFrame td, .stDataFrame th {
+            border: none !important;
+        }
+        .stDataFrame th {
+            font-weight: bold !important;
+        }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-    # 2. Ratio 1:2 (on réduit le SL si nécessaire)
-    required_sl = tp_pct / min_ratio
-    if required_sl < sl_pct:
-        sl_pct = round(required_sl, 2)
-
-    # 3. SL minimum absolu -> rejet si trop serré
-    if sl_pct < min_sl:
-        print(f"❌ Trade REJETÉ : SL trop serré ({sl_pct:.2f}%)")
-        return None, None, None
-
-    # 4. Multiplicateurs finaux
-    final_tp_mult = round(1 + tp_pct / 100, 3)
-    final_sl_mult = round(1 - sl_pct / 100, 3)
-
-    # 5. Trailing Stop : doit être plus serré que le SL (max 80% du SL)
-    max_allowed_trail = sl_pct * 0.8
-    if trail_pct > max_allowed_trail:
-        trail_pct = round(max_allowed_trail, 2)
-    if trail_pct < 0.3:
-        trail_pct = 0.3
-    if trail_pct > 5.0:
-        trail_pct = 5.0
-
-    return final_tp_mult, final_sl_mult, trail_pct
-
-# ============================================================
-# --- FONCTION DE MISE À JOUR EN DIRECT VIA GITHUB API ---
-def update_run_status_github(phase, progress, current_ticker, last_action, current_score, total_tickers):
-    """
-    Écrit le statut du run en direct dans le dépôt northsentinel-data
-    via l'API GitHub, sans cloner le repo.
-    """
-    if not DATA_REPO_TOKEN:
-        return
-
-    # --- CORRECTION : conversion de current_score en int pour éviter TypeError ---
-    score = int(current_score) if current_score is not None else 0
-
-    status = {
-        "phase": phase,
-        "progress": f"{progress}/{total_tickers}",
-        "current_ticker": current_ticker,
-        "last_action": last_action,
-        "current_score": score,
-        "timestamp": datetime.now(MONTREAL_TZ).strftime('%H:%M:%S'),
-        "run_active": True
-    }
-
-    content = json.dumps(status)
-    encoded = base64.b64encode(content.encode()).decode()
-
-    url = "https://api.github.com/repos/LuckyHT438/northsentinel-data/contents/run_status.json"
-    headers = {
-        "Authorization": f"token {DATA_REPO_TOKEN}",
-        "Accept": "application/vnd.github.v3+json"
-    }
-
-    # Récupérer le SHA du fichier existant (pour le mettre à jour)
-    sha = None
-    try:
-        r = requests.get(url, headers=headers)
-        if r.status_code == 200:
-            sha = r.json().get('sha')
-    except:
-        pass
-
-    data = {
-        "message": f"Live update: {current_ticker} ({phase})",
-        "content": encoded,
-        "branch": "main"
-    }
-    if sha:
-        data["sha"] = sha
-
-    try:
-        requests.put(url, headers=headers, json=data, timeout=5)
-    except Exception as e:
-        # On ignore les erreurs pour ne pas perturber le run
-        pass
-
-# ============================================================
-
-def get_exit_time():
-    now_mtl = datetime.now(MONTREAL_TZ)
-    if is_market_closed() == 'early_close':
-        exit_time = now_mtl.replace(hour=13, minute=0, second=0, microsecond=0)
-        return exit_time.strftime('%H:%M')
-    if now_mtl.hour < 12:
-        exit_time = now_mtl.replace(hour=11, minute=30, second=0, microsecond=0)
-    else:
-        exit_time = now_mtl.replace(hour=15, minute=45, second=0, microsecond=0)
-    return exit_time.strftime('%H:%M')
-
-def get_gap_min(bias=None):
-    now_mtl = datetime.now(MONTREAL_TZ)
-    if now_mtl.hour < 12:
-        base = 4.0
-    else:
-        base = 2.0
-    if bias == "Risk-on":
-        return max(1.0, base - 0.5)
-    elif bias == "Risk-off":
-        return min(5.0, base + 0.5)
-    else:
-        return base
-
-def get_news_rss(ticker):
-    try:
-        if ticker in canadian_symbols:
-            base_url = "https://news.google.com/rss/search"
-            params = {"q": f"{ticker}+stock", "hl": "en-CA", "gl": "CA"}
+# --- AUTHENTIFICATION ---
+def check_password():
+    if "authenticated" not in st.session_state:
+        st.session_state.authenticated = False
+    if st.session_state.authenticated:
+        return True
+    st.title("🔐 Restricted Access")
+    password_input = st.text_input("Enter password", type="password")
+    if st.button("Sign in"):
+        if password_input == st.secrets["password"]:
+            st.session_state.authenticated = True
+            st.rerun()
         else:
-            base_url = "https://news.google.com/rss/search"
-            params = {"q": f"{ticker}+stock", "hl": "en-US", "gl": "US", "ceid": "US:en"}
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0'}
-        r = requests.get(base_url, headers=headers, timeout=5, params=params)
-        soup = BeautifulSoup(r.content, 'xml')
-        items = soup.find_all('item')[:3]
-        news_data = []
-        now_utc = datetime.now(timezone.utc)
-        for item in items:
-            title = item.find('title').text if item.find('title') else ''
-            pub_date_str = item.find('pubDate').text if item.find('pubDate') else ''
-            try:
-                pub_date = datetime.strptime(pub_date_str, '%a, %d %b %Y %H:%M:%S %Z').replace(tzinfo=timezone.utc)
-                hours_ago = (now_utc - pub_date).total_seconds() / 3600
-                if hours_ago < 6:
-                    news_data.append({'title': title, 'hours_ago': hours_ago})
-            except:
-                pass
-        return news_data
+            st.error("Incorrect password")
+    return False
+
+if not check_password():
+    st.stop()
+
+# --- HEADER ---
+col1, col2 = st.columns([1, 5])
+with col1:
+    try:
+        st.image("assets/logo_northsentinel_core.png", width=120)
+    except:
+        st.markdown("### 🏔️ NS")
+with col2:
+    st.markdown("<h1 style='color: #F5A623; margin-bottom: 0;'>NorthSentinel CORE</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #AAAAAA; margin-top: 0; font-size: 1.2rem;'>Real‑time system monitoring cockpit — Beta</p>", unsafe_allow_html=True)
+
+st.divider()
+
+# --- FONCTIONS DE LECTURE (avec API GitHub) ---
+@st.cache_data(ttl=10)
+def fetch_signals():
+    token = st.secrets.get("GITHUB_TOKEN", "")
+    if not token:
+        return []
+    try:
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_PATH_SIGNALS}"
+        headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+        r = requests.get(url, headers=headers, timeout=5)
+        if r.status_code == 200:
+            data = r.json()
+            content = base64.b64decode(data["content"]).decode("utf-8")
+            signals = json.loads(content)
+            return signals if isinstance(signals, list) else []
+        return []
     except:
         return []
 
-def analyze_news_sentiment(title, summary=""):
-    text = f"{title} {summary}".lower()
-    bullish_strong = ['fda approval','partnership','deal','acquisition','buyout','merger','earnings beat','upgraded','breakthrough','contract awarded','clinical success','phase 3','drill results','high-grade','discovery','resource estimate','feasibility study','permit granted','commercial production','joint venture','bought deal','flow-through','positive','upgrade','record revenue','guidance raised','beat estimates']
-    bullish = ['growth','revenue','profit','gain','surge','rally','momentum','expansion','launch','agreement','assay','PEA','preliminary economic','buy rating','outperform','overweight','new contract','granted','approval','approved','commenced','completed','successful']
-    bearish_strong = ['dilution','offering','bankruptcy','lawsuit','sec investigation','delisting','fda rejection','clinical failure','downgraded','private placement','unit offering','permit denied','cease trade','suspension','default','going concern','termination','insider selling','ceo departure','investigation','guidance lowered','missed estimates']
-    bearish = ['loss','decline','drop','fall','warning','concern','risk','delay','delayed','suspended','halted','reduced','lowered','restructuring','layoff','impairment','write-down','debt']
-    score = 0
-    for word in bullish_strong:
-        if word in text:
-            score += 2
-            break
-    for word in bullish:
-        if word in text:
-            score += 1
-            break
-    for word in bearish_strong:
-        if word in text:
-            score -= 2
-            break
-    for word in bearish:
-        if word in text:
-            score -= 1
-            break
-    return score
-
-# === POST-NEWS ===
-def scrape_forexfactory():
+def fetch_run_status():
+    token = st.secrets.get("GITHUB_TOKEN", "")
+    if not token:
+        return None
     try:
-        url = "https://www.forexfactory.com/calendar"
-        headers = {'User-Agent': 'Mozilla/5.0'}
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_PATH_STATUS}"
+        headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
         r = requests.get(url, headers=headers, timeout=3)
-        soup = BeautifulSoup(r.content, 'html.parser')
-        news_events = []
-        rows = soup.find_all('tr', class_='calendar__row')
-        for row in rows:
-            impact = row.find('td', class_='impact')
-            currency = row.find('td', class_='currency')
-            event = row.find('td', class_='event')
-            time_cell = row.find('td', class_='time')
-            if impact and currency and event and time_cell:
-                impact_class = impact.find('span', class_='impact')
-                if impact_class and 'high' in impact_class.get('class', []):
-                    currency_text = currency.text.strip().upper()
-                    event_text = event.text.strip()
-                    time_text = time_cell.text.strip()
-                    if currency_text == 'USD' and any(kw in event_text.lower() for kw in ['fomc statement','fomc press conference','cpi y/y']):
-                        news_events.append({'event': event_text, 'time': time_text, 'source': 'ForexFactory'})
-        print(f"📰 ForexFactory: {len(news_events)} High Impact news found")
-        return news_events
-    except Exception as e:
-        print(f"❌ ForexFactory error: {e}")
-        return None
-
-def scrape_investing():
-    try:
-        url = "https://www.investing.com/economic-calendar"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        r = requests.get(url, headers=headers, timeout=3)
-        soup = BeautifulSoup(r.content, 'html.parser')
-        news_events = []
-        rows = soup.find_all('tr', class_='js-event-item')
-        for row in rows[:30]:
-            volatility = row.find_all('td')
-            if len(volatility) >= 6:
-                currency_text = volatility[2].text.strip().upper()
-                event_text = volatility[3].text.strip()
-                time_text = volatility[0].text.strip()
-                volatility_icons = row.find_all('i', class_='grayFullBullishIcon')
-                if volatility_icons and currency_text == 'USD':
-                    if any(kw in event_text.lower() for kw in ['fomc statement','fomc press conference','cpi y/y']):
-                        try:
-                            gmt_time = datetime.strptime(time_text, '%H:%M')
-                            gmt_time = gmt_time.replace(tzinfo=timezone.utc)
-                            et_time = gmt_time.astimezone(MONTREAL_TZ)
-                            time_text = et_time.strftime('%H:%M')
-                        except:
-                            pass
-                        news_events.append({'event': event_text, 'time': time_text, 'source': 'Investing.com'})
-        print(f"📰 Investing.com: {len(news_events)} High Impact news found")
-        return news_events
-    except Exception as e:
-        print(f"❌ Investing.com error: {e}")
-        return None
-
-def is_high_impact_news(for_tomorrow=False):
-    all_news = []
-    ff_news = scrape_forexfactory()
-    if ff_news:
-        all_news.extend(ff_news)
-    inv_news = scrape_investing()
-    if inv_news:
-        all_news.extend(inv_news)
-    if not all_news:
-        return False, None
-    unique_news = []
-    seen_events = set()
-    for news in all_news:
-        key = news['event'].lower().strip()
-        if key not in seen_events:
-            seen_events.add(key)
-            unique_news.append(news)
-    if for_tomorrow:
-        tomorrow_news = []
-        for news in unique_news:
-            try:
-                news_time = datetime.strptime(news['time'], '%H:%M').time()
-                if news_time >= datetime.strptime('07:30', '%H:%M').time() and news_time <= datetime.strptime('11:00', '%H:%M').time():
-                    tomorrow_news.append(news)
-            except:
-                pass
-        unique_news = tomorrow_news
-        if not unique_news:
-            return False, None
-    print(f"📰 News check: {len(unique_news)} High Impact news | POST-NEWS ACTIVE")
-    for n in unique_news:
-        print(f"   • {n['event']} — {n['time']} ({n['source']})")
-    return True, unique_news
-
-# === SOURCES ACTIONS ===
-def get_tickers_canada():
-    tickers = ["TD.TO","BMO.TO","BNS.TO","NA.TO","ENB.TO","SU.TO","CNQ.TO","SOBO.TO","FTS.TO","AQN.TO","H.TO","BEP-UN.TO","LSPD.TO","OTEX.TO","RCI-B.TO","CAE.TO","MDA.TO","BBD-B.TO","L.TO","MRU.TO","CCO.TO","DOL.TO","CNR.TO","CP.TO","T.TO","BCE.TO","BHC.TO","CSH-UN.TO","AND.TO","AEM.TO","ABX.TO","WPM.TO","GRDG.TO","IFC.TO","SLF.TO","GWO.TO","MG.TO","RBA.TO","AC.TO"]
-    random.shuffle(tickers)
-    selected = tickers[:20]
-    print(f"📊 Canada: {len(selected)} tickers (out of 40)")
-    return selected
-
-def get_dynamic_us_tickers():
-    tickers = []
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    try:
-        url = "https://finance.yahoo.com/gainers"
-        r = requests.get(url, headers=headers, timeout=8)
-        soup = BeautifulSoup(r.content, 'html.parser')
-        for a in soup.find_all('a', href=re.compile(r'/quote/')):
-            t = a.text.strip()
-            if t and t.isalpha() and 2 <= len(t) <= 5:
-                tickers.append(t.upper())
-    except:
-        pass
-    try:
-        url = "https://finance.yahoo.com/losers"
-        r = requests.get(url, headers=headers, timeout=8)
-        soup = BeautifulSoup(r.content, 'html.parser')
-        for a in soup.find_all('a', href=re.compile(r'/quote/')):
-            t = a.text.strip()
-            if t and t.isalpha() and 2 <= len(t) <= 5:
-                tickers.append(t.upper())
-    except:
-        pass
-    try:
-        url = "https://finance.yahoo.com/most-active"
-        r = requests.get(url, headers=headers, timeout=8)
-        soup = BeautifulSoup(r.content, 'html.parser')
-        for a in soup.find_all('a', href=re.compile(r'/quote/')):
-            t = a.text.strip()
-            if t and t.isalpha() and 2 <= len(t) <= 5:
-                tickers.append(t.upper())
-    except:
-        pass
-    try:
-        url = "https://www.alphavantage.co/query?function=TOP_GAINERS_LOSERS&apikey=demo"
-        r = requests.get(url, timeout=8)
-        data = r.json()
-        for item in data.get('top_gainers', [])[:30]:
-            t = item.get('ticker', '')
-            if t and t.isalpha() and 2 <= len(t) <= 5:
-                tickers.append(t.upper())
-    except:
-        pass
-    tickers = list(dict.fromkeys(tickers))[:40]
-    print(f"📊 Dynamic US: {len(tickers)} tickers")
-    return tickers
-
-def get_dynamic_etfs():
-    tickers = []
-    headers = {'User-Agent': 'Mozilla/5.0'}
-    try:
-        url = "https://finance.yahoo.com/etfs"
-        r = requests.get(url, headers=headers, timeout=8)
-        soup = BeautifulSoup(r.content, 'html.parser')
-        for a in soup.find_all('a', href=re.compile(r'/quote/')):
-            t = a.text.strip()
-            if t and t.isalpha() and 2 <= len(t) <= 5:
-                tickers.append(t.upper())
-    except:
-        pass
-    ca_etfs = ["VMO.TO", "XMA.TO", "CHPS.TO", "VI.TO", "XGD.TO", "SOXU.TO", "XFN.TO", "ZUT.TO", "XIU.TO", "XLB.TO", "XDIV.TO", "XBB.TO", "HXS.TO", "XQQ.TO", "XEI.TO", "XWD.TO"]
-    tickers.extend(ca_etfs)
-    tickers = list(dict.fromkeys(tickers))
-    us_etfs = [t for t in tickers if not t.endswith('.TO')]
-    ca_etfs_final = [t for t in tickers if t.endswith('.TO')]
-    us_etfs = us_etfs[:13]
-    ca_etfs_final = ca_etfs_final[:12]
-    result = us_etfs + ca_etfs_final
-    print(f"📊 Dynamic ETFs: {len(result)} tickers (US: {len(us_etfs)}, CA: {len(ca_etfs_final)})")
-    return result
-
-def clean_ticker(t):
-    t_upper = t.upper()
-    if t_upper.endswith('W') or t_upper.endswith('+') or t_upper.endswith('R'):
-        return None
-    if t.count('.') > 1 or '/' in t:
-        return None
-    if len(t) > 6:
-        return None
-    return t_upper
-
-def get_all_tickers(exclude_ca=False, exclude_us=False):
-    ca_clean = []
-    us_clean = []
-    if not exclude_ca:
-        ca_tickers = get_tickers_canada()
-        for t in ca_tickers:
-            if t not in ca_clean:
-                ca_clean.append(t)
-    if not exclude_us:
-        us_tickers = get_dynamic_us_tickers()
-        for t in us_tickers:
-            clean = clean_ticker(t)
-            if clean and clean not in ca_clean and clean not in us_clean:
-                us_clean.append(clean)
-    result = ca_clean + us_clean[:25]
-    print(f"🎯 TOTAL STOCKS: {len(result)} tickers (CA: {len(ca_clean)}, US: {min(len(us_clean), 25)})")
-    return result
-
-def get_fnb_list(exclude_ca=False, exclude_us=False):
-    all_fnb = get_dynamic_etfs()
-    if exclude_ca:
-        all_fnb = [f for f in all_fnb if not f.endswith('.TO')]
-    if exclude_us:
-        all_fnb = [f for f in all_fnb if f.endswith('.TO')]
-    print(f"🎯 TOTAL ETFs: {len(all_fnb)} tickers")
-    return all_fnb
-
-def calculate_rsi(prices, period=14):
-    delta = prices.diff()
-    gain = delta.where(delta > 0, 0).rolling(period).mean()
-    loss = -delta.where(delta < 0, 0).rolling(period).mean()
-    rs = gain / loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi.iloc[-1] if len(rsi) > 0 else None
-
-def get_stock_data(ticker, rate_limited_flag):
-    now_mtl = datetime.now(MONTREAL_TZ)
-    market_status = is_market_closed()
-    if ticker not in canadian_symbols and market_status in ('closed', 'us_closed'):
-        return None
-    if ticker in canadian_symbols and market_status in ('closed', 'ca_closed'):
-        return None
-    try:
-        stock = yf.Ticker(ticker, session=HTTP_SESSION)
-        info = stock.info
-        time.sleep(random.uniform(0.3, 0.5))
-        if not info or (info.get('regularMarketPrice') is None and info.get('currentPrice') is None):
-            if info.get('message') and 'rate' in str(info.get('message','')).lower():
-                print(f"\n⚠️ RATE LIMIT detected - Pausing")
-                rate_limited_flag[0] = True
-                return None
-        bid = info.get('bid')
-        ask = info.get('ask')
-        price = info.get('currentPrice') or info.get('regularMarketPrice')
-        spread_pct = 0.0
-        if bid and ask and bid > 0 and ask > 0:
-            mid = (bid + ask) / 2.0
-            spread_pct = ((ask - bid) / mid) * 100.0
-            if spread_pct > MAX_SPREAD_PCT:
-                print(f"❌ Spread trop élevé: {spread_pct:.2f}% (limite {MAX_SPREAD_PCT}%)")
-                return None
-            if spread_pct > 0.3:
-                price = ask
-        if not price:
-            return None
-        if now_mtl.hour == 9 and now_mtl.minute < 30:
-            pre_market = info.get('preMarketPrice')
-            if pre_market and pre_market > 0:
-                price = pre_market
-        if price < PRICE_MIN_ACTIONS or price > PRICE_MAX_ACTIONS:
-            return None
-        prev_close = info.get('previousClose')
-        if not prev_close:
-            return None
-        gap = ((price - prev_close) / prev_close * 100)
-        GAP_MIN = get_gap_min()
-        if gap > 50 or gap < GAP_MIN:
-            return None
-        volume = info.get('volume', 0)
-        is_canadian = ticker in canadian_symbols
-        vol_min = 100_000 if is_canadian else 500_000
-        if volume < vol_min:
-            return None
-        avg_volume = info.get('averageVolume', volume)
-        vol_ratio = volume / avg_volume if avg_volume > 0 else 1
-
-        # === CALCUL DU SCORE AVEC CRITÈRE N°9 ===
-        score = 0
-        # 1. Gap
-        if 5 <= gap <= 40:
-            score += 1
-        # 2. Volume ratio
-        if vol_ratio > 1.5:
-            score += 1
-        # 3. Float (avec bonus si manquant)
-        float_shares = info.get('floatShares')
-        if float_shares is not None:
-            if float_shares < 50_000_000:
-                score += 1
-        else:
-            score += 1
-        # 4. Bêta (avec bonus si manquant)
-        beta = info.get('beta')
-        if beta is not None:
-            if beta > 1.0:
-                score += 1
-        else:
-            score += 1
-        # 5. Short ratio (avec bonus si manquant)
-        short_ratio = info.get('shortRatio')
-        if short_ratio is not None:
-            if short_ratio > 2:
-                score += 1
-        else:
-            score += 1
-        # 6. Prix vs SMA50
-        rsi_50 = info.get('fiftyDayAverage', 0)
-        current_close = info.get('regularMarketPreviousClose', price)
-        if rsi_50 > 0 and current_close > rsi_50:
-            score += 1
-        # 7. News (positive ou négative)
-        news = get_news_rss(ticker)
-        if news:
-            for n in news[:3]:
-                sentiment = analyze_news_sentiment(n.get('title',''))
-                if sentiment >= 1:
-                    score += 1
-                    break
-                elif sentiment <= -2:
-                    score -= 1
-                    break
-        # === FIN CALCUL SCORE ===
-
-        if score < SCORE_MIN_ACTIONS:
-            return None
-        exchange = get_exchange_from_info(info)
-        cap_category = get_market_cap_category(ticker)
-        market_bias = _get_market_bias(ticker)
-        trail_percent = get_trail_percent(score, is_fnb=False, cap_category=cap_category, market_bias=market_bias, spread_pct=spread_pct)
-        return {
-            'ticker': ticker,
-            'exchange': exchange,
-            'price': price,
-            'gap': gap,
-            'score': score,
-            'vol_ratio': vol_ratio,
-            'trail_percent': trail_percent,
-            'cap_category': cap_category,
-            'market_bias': market_bias,
-            'spread_pct': spread_pct
-        }
-    except Exception as e:
-        err_str = str(e)
-        if "429" in err_str or "Too Many Requests" in err_str:
-            print(f"\n⚠️ RATE LIMIT YF - Pausing")
-            rate_limited_flag[0] = True
-        return None
-
-def analyze_fnb(ticker):
-    now_mtl = datetime.now(MONTREAL_TZ)
-    market_status = is_market_closed()
-    if not ticker.endswith('.TO') and market_status in ('closed', 'us_closed'):
-        return None
-    if ticker.endswith('.TO') and market_status in ('closed', 'ca_closed'):
-        return None
-    try:
-        stock = yf.Ticker(ticker, session=HTTP_SESSION)
-        info = stock.info
-        hist = stock.history(period="1mo")
-        time.sleep(random.uniform(0.3, 0.5))
-        if hist.empty or len(hist) < 2:
-            return None
-        closes = hist['Close']
-        volumes = hist['Volume']
-        price = closes.iloc[-1]
-        bid = info.get('bid')
-        ask = info.get('ask')
-        spread_pct = 0.0
-        if bid and ask and bid > 0 and ask > 0:
-            mid = (bid + ask) / 2.0
-            spread_pct = ((ask - bid) / mid) * 100.0
-            if spread_pct > MAX_SPREAD_PCT:
-                print(f"❌ Spread trop élevé pour ETF: {spread_pct:.2f}% (limite {MAX_SPREAD_PCT}%)")
-                return None
-            if spread_pct > 0.3:
-                price = ask
-        if now_mtl.hour == 9 and now_mtl.minute < 30:
-            pre_market = info.get('preMarketPrice')
-            if pre_market and pre_market > 0:
-                price = pre_market
-        if not price or price < 0.5 or price > PRICE_MAX_FNB:
-            return None
-        prev_close = closes.iloc[-2] if len(closes) >= 2 else None
-        if not prev_close:
-            return None
-        gap = ((price - prev_close) / prev_close * 100)
-        volume = volumes.iloc[-1] if len(volumes) > 0 else 0
-        avg_volume = volumes.mean() if len(volumes) > 0 else 1
-        crit_gap = 0.5 <= gap <= 8
-        vol_ratio = volume / avg_volume if avg_volume > 0 else 1
-        crit_vol = vol_ratio > 0.9
-        aum = info.get('totalAssets', 0) or info.get('assetsUnderManagement', 0)
-        crit_aum = aum > 50_000_000 if aum else True
-        rsi = None
-        crit_rsi = False
-        sma20 = None
-        crit_sma = False
-        if len(closes) > 14:
-            rsi = calculate_rsi(closes)
-            crit_rsi = 35 <= rsi <= 80 if rsi else False
-        if len(closes) >= 20:
-            sma20 = closes.rolling(20).mean().iloc[-1]
-            crit_sma = price > 0.70 * sma20
-        score = sum([crit_gap, crit_vol, crit_aum, crit_rsi, crit_sma])
-        if score < SCORE_MIN_FNB:
-            return None
-        exchange = get_exchange_from_info(info)
-        market_bias = _get_market_bias(ticker)
-        trail_percent = get_trail_percent(score, is_fnb=True, market_bias=market_bias, spread_pct=spread_pct)
-        return {
-            'ticker': ticker,
-            'exchange': exchange,
-            'price': price,
-            'gap': gap,
-            'score': score,
-            'vol_ratio': vol_ratio,
-            'aum_m': aum/1_000_000 if aum else 0,
-            'rsi': rsi,
-            'sma20': sma20,
-            'trail_percent': trail_percent,
-            'market_bias': market_bias,
-            'spread_pct': spread_pct
-        }
-    except:
-        return None
-
-def format_capital(amount):
-    if amount >= 1_000_000:
-        return f"{amount/1_000_000:.1f}M$"
-    elif amount >= 1_000:
-        return f"{amount/1_000:.0f}k$"
-    else:
-        return f"{amount}$"
-
-# ============================================================
-# --- NOUVELLE VERSION DE save_core_signal AVEC FUSION (étape d) ---
-def save_core_signal(ticker, signal_type, price, score, gap, vol_ratio, trail_percent, cap_category=None, aum_m=None, market_bias=None, spread_pct=None):
-    try:
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        filepath = os.path.join(script_dir, 'core_signals_today.json')
-        today = datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d')
-        timestamp = datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M')
-
-        # --- ÉTAPE 1 : Récupérer les signaux existants depuis le dépôt distant (via API GitHub) ---
-        existing_signals = []
-        if DATA_REPO_TOKEN:
-            try:
-                url = "https://api.github.com/repos/LuckyHT438/northsentinel-data/contents/core_signals_today.json"
-                headers = {"Authorization": f"token {DATA_REPO_TOKEN}", "Accept": "application/vnd.github.v3+json"}
-                r = requests.get(url, headers=headers, timeout=5)
-                if r.status_code == 200:
-                    data = r.json()
-                    content = base64.b64decode(data["content"]).decode("utf-8")
-                    existing_signals = json.loads(content)
-                    if not isinstance(existing_signals, list):
-                        existing_signals = []
-                    print(f"📥 Récupéré {len(existing_signals)} signaux existants depuis le dépôt distant")
-                elif r.status_code == 404:
-                    print("ℹ️ Aucun fichier existant sur le dépôt distant (création d'un nouveau)")
-                else:
-                    print(f"⚠️ Erreur API GitHub : {r.status_code}")
-            except Exception as e:
-                print(f"⚠️ Impossible de récupérer les signaux distants : {e}")
-
-        # --- ÉTAPE 2 : Fusionner avec les signaux locaux (si le fichier local existe) ---
-        local_signals = []
-        if os.path.exists(filepath):
-            try:
-                with open(filepath, 'r') as f:
-                    local_signals = json.load(f)
-                    if not isinstance(local_signals, list):
-                        local_signals = []
-            except:
-                pass
-
-        # Fusionner les deux listes (en évitant les doublons basés sur ticker + timestamp)
-        all_signals = existing_signals.copy()
-        existing_keys = set()
-        for s in all_signals:
-            key = (s.get('ticker'), s.get('timestamp'))
-            existing_keys.add(key)
-
-        for s in local_signals:
-            key = (s.get('ticker'), s.get('timestamp'))
-            if key not in existing_keys:
-                all_signals.append(s)
-                existing_keys.add(key)
-
-        # --- ÉTAPE 3 : Ajouter le nouveau signal ---
-        new_signal = {
-            "ticker": str(ticker),
-            "type": str(signal_type),
-            "entry_price": float(round(price, 2)),
-            "score": int(score),
-            "gap": float(round(gap, 1)),
-            "vol_ratio": float(round(vol_ratio, 1)),
-            "trail_percent": float(trail_percent),
-            "timestamp": str(timestamp),
-            "date": str(today)
-        }
-        if cap_category:
-            new_signal["cap_category"] = str(cap_category)
-        if aum_m is not None:
-            new_signal["aum_m"] = float(round(aum_m, 1))
-        if market_bias:
-            new_signal["market_bias"] = str(market_bias)
-        if spread_pct is not None:
-            new_signal["spread_pct"] = float(round(spread_pct, 2))
-
-        all_signals.append(new_signal)
-
-        # --- ÉTAPE 4 : Sauvegarder localement ---
-        with open(filepath, 'w') as f:
-            json.dump(all_signals, f, indent=2)
-
-        print(f"💾 Signal sauvegardé localement: {ticker} ({signal_type}) — Score: {score} at {timestamp}")
-        print(f"📊 Total des signaux après fusion : {len(all_signals)}")
-
-        # --- ÉTAPE 5 : Pousser vers le dépôt ---
-        push_signals_to_repo()
-        return True
-    except Exception as e:
-        print(f"❌ Signal save error: {e}")
-        return False
-
-# ============================================================
-
-def should_save_signal(heure, minute):
-    if heure == 10 and 0 <= minute <= 2:
-        return True
-    elif heure == 10 and 30 <= minute <= 32:
-        return True
-    elif heure == 14 and 55 <= minute <= 57:
-        return True
-    elif heure == 15 and 55 <= minute <= 57:
-        return True
-    elif os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch":
-        return True
-    return False
-
-def save_signal_for_overnight(signals):
-    try:
-        data = []
-        for signal, ticker_type in signals:
-            data.append({
-                "ticker": signal['ticker'],
-                "type": ticker_type,
-                "entry_price": signal['price'],
-                "score": signal['score'],
-                "gap": signal['gap'],
-                "vol_ratio": signal['vol_ratio'],
-                "trail_percent": signal['trail_percent'],
-                "date": datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d')
-            })
-        with open('/tmp/signal_1455.json', 'w') as f:
-            json.dump(data, f)
-        print(f"💾 {len(data)} signal(s) saved for overnight check")
-        return True
-    except Exception as e:
-        print(f"❌ Signal save error: {e}")
-        return False
-
-def load_previous_signal(ticker_type=None):
-    try:
-        with open('/tmp/signal_1455.json', 'r') as f:
-            data = json.load(f)
-        today = datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d')
-        if isinstance(data, list):
-            for item in data:
-                if item.get('date') == today and item.get('ticker'):
-                    if ticker_type is None or item.get('type') == ticker_type:
-                        print(f"📂 Previous signal loaded: {item['ticker']} ({item['type']})")
-                        return item
-            return None
-        else:
-            if data.get('date') == today and data.get('ticker'):
-                if ticker_type is None or data.get('type') == ticker_type:
-                    return data
-            return None
-    except FileNotFoundError:
-        return None
-    except Exception as e:
-        print(f"❌ Signal load error: {e}")
-        return None
-
-# ===================== MAIN =====================
-def main():
-    START_TIME = time.time()
-    now_mtl = datetime.now(MONTREAL_TZ)
-    jour = now_mtl.weekday()
-    heure = now_mtl.hour
-    minute = now_mtl.minute
-    is_manual_run = os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"
-    market_status = is_market_closed()
-    if market_status == 'closed':
-        if not is_manual_run:
-            print(f"🏖️ Both markets closed (holiday) - No execution")
-            return
-        else:
-            print("🔧 Manual run authorized despite holiday")
-    elif market_status == 'us_closed':
-        print(f"🇺🇸 US market closed today")
-    elif market_status == 'ca_closed':
-        print(f"🇨🇦 CA market closed today")
-    elif market_status == 'early_close':
-        print(f"⏰ Early close today (1:00 PM ET)")
-    if jour == 6:
-        if not is_manual_run and (heure < 20 or (heure == 20 and minute < 15)):
-            print("⏰ Sunday before 8:15 PM - No execution")
-            return
-    if jour == 5:
-        if not is_manual_run:
-            print("⏰ Saturday - No execution (manual run only)")
-            return
-        else:
-            print("🔧 Manual run authorized on Saturday")
-
-    global_bias = get_global_market_bias()
-    print(f"🌍 Global Market Bias: {global_bias}")
-
-    # === OVERNIGHT CHECK ===
-    if jour in [0,1,2,3] and heure == 15 and minute >= 55:
-        tomorrow = now_mtl.date() + timedelta(days=1)
-        tomorrow_dt = datetime(tomorrow.year, tomorrow.month, tomorrow.day)
-        tomorrow_status = is_market_closed(tomorrow_dt)
-        if tomorrow_status == 'closed':
-            print(f"🏖️ Both markets closed tomorrow - No Overnight Check")
-            return
-        exclude_ca = (market_status == 'ca_closed') or (tomorrow_status == 'ca_closed')
-        exclude_us = (market_status == 'us_closed') or (tomorrow_status == 'us_closed')
-        if exclude_ca:
-            print(f"🇨🇦 CA market closed — scanning US only")
-        elif exclude_us:
-            print(f"🇺🇸 US market closed — scanning CA only")
-        print("=" * 50)
-        print(f"🤖 NorthSentinel Core — Overnight Check - {now_mtl.strftime('%Y-%m-%d %H:%M:%S')} (Montreal)")
-        print("=" * 50)
-        post_news_tomorrow, news_tomorrow = is_high_impact_news(for_tomorrow=True)
-        tickers_actions = get_all_tickers(exclude_ca=exclude_ca, exclude_us=exclude_us)
-        
-        # --- Écrire le statut initial avec phase="stocks" ---
-        update_run_status_github("stocks", 0, "Démarrage", "🔄 Démarrage du scan Stocks", 0, len(tickers_actions))
-        print(f"📡 Statut initial Stocks écrit (0/{len(tickers_actions)})")
-        # --------------------------------------------------
-        
-        print(f"\n🔍 Phase 1: Analyzing {len(tickers_actions)} stocks for Overnight...\n")
-        GAP_MIN = get_gap_min(global_bias)
-        rate_limited_flag = [False]
-        buys_actions = []
-        analysed_actions = 0
-        for i, ticker in enumerate(tickers_actions):
-            if time.time() - START_TIME > 120:
-                print(f"\n⚠️ TIMEOUT 120s - {i}/{len(tickers_actions)} stocks processed")
-                break
-            print(f"[STOCK {i+1}/{len(tickers_actions)}] {ticker}...", end=" ")
-            data = get_stock_data(ticker, rate_limited_flag)
-            analysed_actions = i + 1
-            if data and data['score'] >= SCORE_MIN_OVERNIGHT_ACTIONS:
-                buys_actions.append(data)
-                print(f"✅ Score: {data['score']}/9")
-            elif data:
-                print(f"❌ Score insufficient: {data['score']}/9")
-            else:
-                print("❌")
-            # --- AJOUT RUN STATUS via GitHub API ---
-            if data:
-                last_action = "✅ Retenu" if data['score'] >= SCORE_MIN_OVERNIGHT_ACTIONS else "❌ Rejeté (score)"
-                current_score = data['score'] if data else 0
-            else:
-                last_action = "❌ Rejeté"
-                current_score = 0
-            update_run_status_github("stocks", i+1, ticker, last_action, current_score, len(tickers_actions))
-            # ------------------------------------------
-            if rate_limited_flag[0]:
-                print("⏸️ Rate limit pause 15s...")
-                time.sleep(15)
-                rate_limited_flag[0] = False
-        tickers_fnb = get_fnb_list(exclude_ca=exclude_ca, exclude_us=exclude_us)
-        print(f"\n🔍 Phase 2: Analyzing {len(tickers_fnb)} ETFs for Overnight...\n")
-        buys_fnb = []
-        analysed_fnb = 0
-        for i, ticker in enumerate(tickers_fnb):
-            if time.time() - START_TIME > 150:  # === TIMEOUT PORTÉ À 150s ===
-                print(f"\n⚠️ TIMEOUT 150s - {i}/{len(tickers_fnb)} ETFs processed")
-                break
-            print(f"[ETF {i+1}/{len(tickers_fnb)}] {ticker}...", end=" ")
-            data = analyze_fnb(ticker)
-            analysed_fnb = i + 1
-            if data and data['score'] >= SCORE_MIN_OVERNIGHT_FNB:
-                buys_fnb.append(data)
-                print(f"✅ Score: {data['score']}/5")
-            elif data:
-                print(f"❌ Score insufficient: {data['score']}/5")
-            else:
-                print("❌")
-            # --- AJOUT RUN STATUS via GitHub API ---
-            if data:
-                last_action = "✅ Retenu" if data['score'] >= SCORE_MIN_OVERNIGHT_FNB else "❌ Rejeté (score)"
-                current_score = data['score'] if data else 0
-            else:
-                last_action = "❌ Rejeté"
-                current_score = 0
-            update_run_status_github("etfs", i+1, ticker, last_action, current_score, len(tickers_fnb))
-            # ------------------------------------------
-        elapsed = time.time() - START_TIME
-        scope_label = "US/CA"
-        if exclude_ca:
-            scope_label = "US Only"
-        elif exclude_us:
-            scope_label = "CA Only"
-        message = f"🤖 <b>NorthSentinel Core</b>™\n"
-        message += f"<i>{scope_label} essential intraday & overnight hold trading signals. Manual execution.</i>\n"
-        if exclude_ca:
-            message += f"🇨🇦 CA market closed — US setups only\n"
-        elif exclude_us:
-            message += f"🇺🇸 US market closed — CA setups only\n"
-        message += f"📅 {now_mtl.strftime('%Y-%m-%d %H:%M')} (Montreal)\n"
-        message += f"💰 Capital: {format_capital(CAPITAL)} | Min Gap: {GAP_MIN}%\n"
-        if market_status == 'early_close':
-            message += f"⚠️ EARLY CLOSE TODAY (1:00 PM ET)\n"
-        message += "═" * 35 + "\n"
-        if post_news_tomorrow and news_tomorrow:
-            message += f"\n⚠️ <b>HIGH IMPACT NEWS TOMORROW</b>\n"
-            for news in news_tomorrow:
-                sentiment = analyze_news_sentiment(news['event'])
-                if sentiment >= 1:
-                    direction = "📈"
-                elif sentiment <= -1:
-                    direction = "📉"
-                else:
-                    direction = "➡️"
-                message += f"📅 {news['event']} — {news['time']} ({news['source']}) {direction}\n"
-            message += f"💡 Critical window: 7:30 AM-11:00 AM (Montreal time)\n"
-            message += "═" * 35 + "\n"
-        message += f"\n🚀 <b>STOCK — Overnight Setup</b>\n"
-        message += f"📊 Scanned: {analysed_actions}/{len(tickers_actions)} | Min Score: {SCORE_MIN_OVERNIGHT_ACTIONS}/9\n"
-        if buys_actions:
-            best_action = sorted(buys_actions, key=lambda x: (x['score'], x['vol_ratio']), reverse=True)[0]
-            b = best_action
-            buy_price = round(b['price'], 2)
-
-            tp_mult_brut = get_tp_multiplier(b['score'], b['gap'], post_news_tomorrow, b.get('cap_category', 'Large Cap'), b.get('market_bias'), b.get('spread_pct', 0.0))
-            sl_mult_brut = get_sl_multiplier(b['score'], b.get('cap_category', 'Large Cap'), b.get('market_bias'), b.get('spread_pct', 0.0))
-            trail_pct_brut = b['trail_percent']
-
-            tp_mult, sl_mult, trail_pct = apply_risk_mandate(tp_mult_brut, sl_mult_brut, trail_pct_brut)
-            if tp_mult is None:
-                message += f"❌ No Valid Stock for Overnight (rejected: SL too tight)\n"
-                message += f"⏰ Until next time!\n"
-            else:
-                sell_price = round(buy_price * tp_mult, 2)
-                stop = round(buy_price * sl_mult, 2)
-                trail_price = round(buy_price * (1 - trail_pct/100), 2)
-                quantity = calculate_quantity(buy_price, stop, CAPITAL, RISK_PER_TRADE, MAX_CAPITAL_PER_POSITION)
-                market_bias = b.get('market_bias', '⚪ Neutral (N/A)')
-                cap_display = f" | {b.get('cap_category', 'N/A')}" if 'cap_category' in b else ""
-                spread_pct = b.get('spread_pct', 0.0)
-                if spread_pct > 0:
-                    spread_usd = round((spread_pct / 100) * b['price'], 2)
-                    spread_display = f" | Spread: {spread_pct:.2f}% (${spread_usd:.2f})"
-                else:
-                    spread_display = ""
-                message += (
-                    f"\n🔹 <b>{b['ticker']}</b> ({b['exchange']}){cap_display} | Score: <b>{b['score']}/9</b>{spread_display} | {market_bias}\n"
-                    f"  📊 GAP: {b['gap']:.1f}% | VOL: x{b['vol_ratio']:.1f}\n"
-                    f"  💵 CUR. PRICE: ${b['price']}\n"
-                    f"  🎯 ENTRY PRICE: ${buy_price}\n"
-                    f"  📦 QTY TO BUY: {quantity} shares\n"
-                    f"  📈 TAKE-PROFIT: ${sell_price} (+{round((tp_mult - 1) * 100, 1)}%)\n"
-                    f"  🛑 STOP LOSS: ${stop} ({round((1 - sl_mult) * 100, 1)}%)\n"
-                    f"  🔄 TRAILING STOP: ${trail_price} → {trail_pct}%\n"
-                )
-                save_core_signal(
-                    ticker=b['ticker'],
-                    signal_type="STOCK",
-                    price=b['price'],
-                    score=b['score'],
-                    gap=b['gap'],
-                    vol_ratio=b['vol_ratio'],
-                    trail_percent=trail_pct,
-                    cap_category=b.get('cap_category', None),
-                    market_bias=b.get('market_bias'),
-                    spread_pct=b.get('spread_pct', 0.0)
-                )
-        else:
-            message += f"❌ No Valid Stock for Overnight\n"
-            message += f"⏰ Until next time!\n"
-
-        message += f"\n🚀 <b>ETF — Overnight Setup</b>\n"
-        message += f"📊 Scanned: {analysed_fnb}/{len(tickers_fnb)} | Min Score: 4/5\n"
-        if buys_fnb:
-            best_fnb = sorted(buys_fnb, key=lambda x: (x['score'], x['vol_ratio']), reverse=True)[0]
-            b = best_fnb
-            buy_price = round(b['price'], 2)
-
-            tp_mult_brut = get_fnb_tp_multiplier(b['score'], b['gap'], post_news_tomorrow, b.get('market_bias'), b.get('spread_pct', 0.0))
-            sl_mult_brut = get_sl_multiplier(b['score'], "Large Cap", b.get('market_bias'), b.get('spread_pct', 0.0))
-            trail_pct_brut = b['trail_percent']
-
-            tp_mult, sl_mult, trail_pct = apply_risk_mandate(tp_mult_brut, sl_mult_brut, trail_pct_brut, max_sl=2.5, max_tp=5.0, min_sl=0.5)
-            if tp_mult is None:
-                message += f"❌ No Valid ETF for Overnight (rejected: SL too tight)\n"
-                message += f"⏰ Until next time!\n"
-            else:
-                sell_price = round(buy_price * tp_mult, 2)
-                stop = round(buy_price * sl_mult, 2)
-                trail_price = round(buy_price * (1 - trail_pct/100), 2)
-                quantity = calculate_quantity(buy_price, stop, CAPITAL, RISK_PER_TRADE, MAX_CAPITAL_PER_POSITION)
-                market_bias = b.get('market_bias', '⚪ Neutral (N/A)')
-                aum_display = f" (AUM: {b.get('aum_m', 0):.1f}M$)" if b.get('aum_m', 0) > 0 else ""
-                spread_pct = b.get('spread_pct', 0.0)
-                if spread_pct > 0:
-                    spread_usd = round((spread_pct / 100) * b['price'], 2)
-                    spread_display = f" | Spread: {spread_pct:.2f}% (${spread_usd:.2f})"
-                else:
-                    spread_display = ""
-                message += (
-                    f"\n🔹 <b>{b['ticker']}</b> ({b['exchange']}){aum_display} | Score: <b>{b['score']}/5</b>{spread_display} | {market_bias}\n"
-                    f"  📊 GAP: {b['gap']:.2f}% | VOL: x{b['vol_ratio']:.2f}\n"
-                    f"  💵 CUR. PRICE: ${b['price']:.2f}\n"
-                    f"  🎯 ENTRY PRICE: ${buy_price}\n"
-                    f"  📦 QTY TO BUY: {quantity} units\n"
-                    f"  📈 TAKE-PROFIT: ${sell_price} (+{round((tp_mult - 1) * 100, 1)}%)\n"
-                    f"  🛑 STOP LOSS: ${stop} ({round((1 - sl_mult) * 100, 1)}%)\n"
-                    f"  🔄 TRAILING STOP: ${trail_price} → {trail_pct}%\n"
-                )
-                save_core_signal(
-                    ticker=b['ticker'],
-                    signal_type="ETF",
-                    price=b['price'],
-                    score=b['score'],
-                    gap=b['gap'],
-                    vol_ratio=b['vol_ratio'],
-                    trail_percent=trail_pct,
-                    aum_m=b.get('aum_m', None),
-                    market_bias=b.get('market_bias'),
-                    spread_pct=b.get('spread_pct', 0.0)
-                )
-        else:
-            message += f"❌ No Valid ETF for Overnight\n"
-            message += f"⏰ Until next time!\n"
-        message += "\n\n<i>Automated informational signal. Not financial or trading advice.</i>"
-        print("\n" + "=" * 50)
-        print(f"⏱️ Total time: {elapsed:.1f}s")
-        print("📤 Sending Telegram...")
-        send_telegram(message)
-        print("=" * 50)
-
-        # --- AJOUT RUN STATUS : fin du run (run_active = False) via GitHub API ---
-        final_status = {
-            "phase": "terminé",
-            "progress": "✅ Terminé",
-            "current_ticker": "",
-            "last_action": "Run terminé",
-            "current_score": 0,
-            "timestamp": datetime.now(MONTREAL_TZ).strftime('%H:%M:%S'),
-            "run_active": False
-        }
-        content = json.dumps(final_status)
-        encoded = base64.b64encode(content.encode()).decode()
-        url = "https://api.github.com/repos/LuckyHT438/northsentinel-data/contents/run_status.json"
-        headers = {"Authorization": f"token {DATA_REPO_TOKEN}", "Accept": "application/vnd.github.v3+json"}
-        sha = None
-        try:
-            r = requests.get(url, headers=headers)
-            if r.status_code == 200:
-                sha = r.json().get('sha')
-        except:
-            pass
-        data = {"message": "Run terminé", "content": encoded, "branch": "main"}
-        if sha:
-            data["sha"] = sha
-        try:
-            requests.put(url, headers=headers, json=data, timeout=5)
-        except:
-            pass
-        # ------------------------------------------------------------
-        return
-
-    # === MODE NORMAL ===
-    post_news = False
-    news_info = None
-    if (heure == 9 and minute >= 25) or (heure == 14 and minute >= 55):
-        post_news, news_info = is_high_impact_news()
-    current_score_min_actions = SCORE_MIN_ACTIONS
-    current_score_min_fnb = SCORE_MIN_FNB
-    GAP_MIN = get_gap_min(global_bias)
-    print("=" * 50)
-    print(f"🤖 NorthSentinel Core™ - {now_mtl.strftime('%Y-%m-%d %H:%M:%S')} (Montreal)")
-    print(f"💰 Capital: {format_capital(CAPITAL)} | Min Gap: {GAP_MIN}% ({global_bias}) | Stock Score: {current_score_min_actions}/9 | ETF: {current_score_min_fnb}/5")
-    if market_status in ('us_closed', 'ca_closed'):
-        if market_status == 'us_closed':
-            print(f"🇺🇸 US market closed — CA only")
-        else:
-            print(f"🇨🇦 CA market closed — US only")
-    if market_status == 'early_close':
-        print(f"⏰ EARLY CLOSE 1:00 PM ET")
-    print("=" * 50)
-    exclude_ca_normal = (market_status == 'ca_closed')
-    exclude_us_normal = (market_status == 'us_closed')
-    tickers_actions = get_all_tickers(exclude_ca=exclude_ca_normal, exclude_us=exclude_us_normal)
-
-    # --- Écrire le statut initial avec phase="stocks" ---
-    update_run_status_github("stocks", 0, "Démarrage", "🔄 Démarrage du scan Stocks", 0, len(tickers_actions))
-    print(f"📡 Statut initial Stocks écrit (0/{len(tickers_actions)})")
-    # --------------------------------------------------
-
-    print(f"\n🔍 Phase 1: Analyzing {len(tickers_actions)} stocks...\n")
-    rate_limited_flag = [False]
-    buys_actions = []
-    analysed_actions = 0
-    for i, ticker in enumerate(tickers_actions):
-        if time.time() - START_TIME > 120:
-            print(f"\n⚠️ TIMEOUT 120s - {i}/{len(tickers_actions)} stocks processed")
-            break
-        print(f"[STOCK {i+1}/{len(tickers_actions)}] {ticker}...", end=" ")
-        data = get_stock_data(ticker, rate_limited_flag)
-        analysed_actions = i + 1
-        if data:
-            buys_actions.append(data)
-            print(f"✅ Score: {data['score']}/9")
-        else:
-            print("❌")
-        # --- AJOUT RUN STATUS via GitHub API ---
-        if data:
-            last_action = "✅ Retenu" if data['score'] >= SCORE_MIN_ACTIONS else "❌ Rejeté (score)"
-            current_score = data['score'] if data else 0
-        else:
-            last_action = "❌ Rejeté"
-            current_score = 0
-        update_run_status_github("stocks", i+1, ticker, last_action, current_score, len(tickers_actions))
-        # ------------------------------------------
-        if rate_limited_flag[0]:
-            print("⏸️ Rate limit pause 15s...")
-            time.sleep(15)
-            rate_limited_flag[0] = False
-    tickers_fnb = get_fnb_list(exclude_ca=exclude_ca_normal, exclude_us=exclude_us_normal)
-    print(f"\n🔍 Phase 2: Analyzing {len(tickers_fnb)} ETFs...\n")
-    buys_fnb = []
-    analysed_fnb = 0
-    for i, ticker in enumerate(tickers_fnb):
-        if time.time() - START_TIME > 150:  # === TIMEOUT PORTÉ À 150s ===
-            print(f"\n⚠️ TIMEOUT 150s - {i}/{len(tickers_fnb)} ETFs processed")
-            break
-        print(f"[ETF {i+1}/{len(tickers_fnb)}] {ticker}...", end=" ")
-        data = analyze_fnb(ticker)
-        analysed_fnb = i + 1
-        if data:
-            buys_fnb.append(data)
-            print(f"✅ Score: {data['score']}/5")
-        else:
-            print("❌")
-        # --- AJOUT RUN STATUS via GitHub API ---
-        if data:
-            last_action = "✅ Retenu" if data['score'] >= SCORE_MIN_FNB else "❌ Rejeté (score)"
-            current_score = data['score'] if data else 0
-        else:
-            last_action = "❌ Rejeté"
-            current_score = 0
-        update_run_status_github("etfs", i+1, ticker, last_action, current_score, len(tickers_fnb))
-        # ------------------------------------------
-    elapsed = time.time() - START_TIME
-    scope_label = "US/CA"
-    if exclude_ca_normal:
-        scope_label = "US Only"
-    elif exclude_us_normal:
-        scope_label = "CA Only"
-    message = f"🤖 <b>NorthSentinel Core</b>™\n"
-    message += f"<i>{scope_label} essential intraday & overnight hold trading signals. Manual execution.</i>\n"
-    if exclude_ca_normal:
-        message += f"🇨🇦 CA market closed — US setups only\n"
-    elif exclude_us_normal:
-        message += f"🇺🇸 US market closed — CA setups only\n"
-    message += f"📅 {now_mtl.strftime('%Y-%m-%d %H:%M')} (Montreal)\n"
-    message += f"💰 Capital: {format_capital(CAPITAL)} | Min Gap: {GAP_MIN}%\n"
-    if market_status == 'early_close':
-        message += f"⚠️ EARLY CLOSE TODAY (1:00 PM ET)\n"
-    message += "═" * 35 + "\n"
-    if post_news and news_info:
-        message += f"\n⚠️ <b>HIGH IMPACT NEWS DETECTED</b>\n"
-        for news in news_info:
-            sentiment = analyze_news_sentiment(news['event'])
-            if sentiment >= 1:
-                direction = "📈"
-            elif sentiment <= -1:
-                direction = "📉"
-            else:
-                direction = "➡️"
-            message += f"📅 {news['event']} — {news['time']} ({news['source']}) {direction}\n"
-        message += "═" * 35 + "\n"
-    message += f"\n🚀 <b>STOCK - Best Setup</b>\n"
-    message += f"📊 Scanned: {analysed_actions}/{len(tickers_actions)} | Min Score: {current_score_min_actions}/9\n"
-    if buys_actions:
-        best_action = sorted(buys_actions, key=lambda x: (x['score'], x['vol_ratio']), reverse=True)[0]
-        b = best_action
-        buy_price = round(b['price'], 2)
-
-        tp_mult_brut = get_tp_multiplier(b['score'], b['gap'], post_news, b.get('cap_category', 'Large Cap'), b.get('market_bias'), b.get('spread_pct', 0.0))
-        sl_mult_brut = get_sl_multiplier(b['score'], b.get('cap_category', 'Large Cap'), b.get('market_bias'), b.get('spread_pct', 0.0))
-        trail_pct_brut = b['trail_percent']
-
-        tp_mult, sl_mult, trail_pct = apply_risk_mandate(tp_mult_brut, sl_mult_brut, trail_pct_brut)
-        if tp_mult is None:
-            message += f"❌ No Valid Stock Identified (rejected: SL too tight)\n"
-            message += f"⏰ Until next time!\n"
-        else:
-            sell_price = round(buy_price * tp_mult, 2)
-            stop = round(buy_price * sl_mult, 2)
-            trail_price = round(buy_price * (1 - trail_pct/100), 2)
-            quantity = calculate_quantity(buy_price, stop, CAPITAL, RISK_PER_TRADE, MAX_CAPITAL_PER_POSITION)
-            market_bias = b.get('market_bias', '⚪ Neutral (N/A)')
-            cap_display = f" | {b.get('cap_category', 'N/A')}" if 'cap_category' in b else ""
-            spread_pct = b.get('spread_pct', 0.0)
-            if spread_pct > 0:
-                spread_usd = round((spread_pct / 100) * b['price'], 2)
-                spread_display = f" | Spread: {spread_pct:.2f}% (${spread_usd:.2f})"
-            else:
-                spread_display = ""
-            message += (
-                f"\n🔹 <b>{b['ticker']}</b> ({b['exchange']}){cap_display} | Score: <b>{b['score']}/9</b>{spread_display} | {market_bias}\n"
-                f"  📊 GAP: {b['gap']:.1f}% | VOL: x{b['vol_ratio']:.1f}\n"
-                f"  💵 CUR. PRICE: ${b['price']}\n"
-                f"  🎯 ENTRY PRICE: ${buy_price}\n"
-                f"  📦 QTY TO BUY: {quantity} shares\n"
-                f"  📈 TAKE-PROFIT: ${sell_price} (+{round((tp_mult - 1) * 100, 1)}%)\n"
-                f"  🛑 STOP LOSS: ${stop} ({round((1 - sl_mult) * 100, 1)}%)\n"
-                f"  🔄 TRAILING STOP: ${trail_price} → {trail_pct}%\n"
-            )
-            if should_save_signal(heure, minute):
-                save_core_signal(
-                    ticker=b['ticker'],
-                    signal_type="STOCK",
-                    price=b['price'],
-                    score=b['score'],
-                    gap=b['gap'],
-                    vol_ratio=b['vol_ratio'],
-                    trail_percent=trail_pct,
-                    cap_category=b.get('cap_category', None),
-                    market_bias=b.get('market_bias'),
-                    spread_pct=b.get('spread_pct', 0.0)
-                )
-    else:
-        message += f"❌ No Valid Stock Identified\n"
-        message += f"⏰ Until next time!\n"
-
-    message += f"\n🚀 <b>ETF - Best Setup</b>\n"
-    message += f"📊 Scanned: {analysed_fnb}/{len(tickers_fnb)} | Min Score: 4/5\n"
-    if buys_fnb:
-        best_fnb = sorted(buys_fnb, key=lambda x: (x['score'], x['vol_ratio']), reverse=True)[0]
-        b = best_fnb
-        buy_price = round(b['price'], 2)
-
-        tp_mult_brut = get_fnb_tp_multiplier(b['score'], b['gap'], post_news, b.get('market_bias'), b.get('spread_pct', 0.0))
-        sl_mult_brut = get_sl_multiplier(b['score'], "Large Cap", b.get('market_bias'), b.get('spread_pct', 0.0))
-        trail_pct_brut = b['trail_percent']
-
-        tp_mult, sl_mult, trail_pct = apply_risk_mandate(tp_mult_brut, sl_mult_brut, trail_pct_brut, max_sl=2.5, max_tp=5.0, min_sl=0.5)
-        if tp_mult is None:
-            message += f"❌ No Valid ETF Identified (rejected: SL too tight)\n"
-            message += f"⏰ Until next time!\n"
-        else:
-            sell_price = round(buy_price * tp_mult, 2)
-            stop = round(buy_price * sl_mult, 2)
-            trail_price = round(buy_price * (1 - trail_pct/100), 2)
-            quantity = calculate_quantity(buy_price, stop, CAPITAL, RISK_PER_TRADE, MAX_CAPITAL_PER_POSITION)
-            market_bias = b.get('market_bias', '⚪ Neutral (N/A)')
-            aum_display = f" (AUM: {b.get('aum_m', 0):.1f}M$)" if b.get('aum_m', 0) > 0 else ""
-            spread_pct = b.get('spread_pct', 0.0)
-            if spread_pct > 0:
-                spread_usd = round((spread_pct / 100) * b['price'], 2)
-                spread_display = f" | Spread: {spread_pct:.2f}% (${spread_usd:.2f})"
-            else:
-                spread_display = ""
-            message += (
-                f"\n🔹 <b>{b['ticker']}</b> ({b['exchange']}){aum_display} | Score: <b>{b['score']}/5</b>{spread_display} | {market_bias}\n"
-                f"  📊 GAP: {b['gap']:.2f}% | VOL: x{b['vol_ratio']:.2f}\n"
-                f"  💵 CUR. PRICE: ${b['price']:.2f}\n"
-                f"  🎯 ENTRY PRICE: ${buy_price}\n"
-                f"  📦 QTY TO BUY: {quantity} units\n"
-                f"  📈 TAKE-PROFIT: ${sell_price} (+{round((tp_mult - 1) * 100, 1)}%)\n"
-                f"  🛑 STOP LOSS: ${stop} ({round((1 - sl_mult) * 100, 1)}%)\n"
-                f"  🔄 TRAILING STOP: ${trail_price} → {trail_pct}%\n"
-            )
-            if should_save_signal(heure, minute):
-                save_core_signal(
-                    ticker=b['ticker'],
-                    signal_type="ETF",
-                    price=b['price'],
-                    score=b['score'],
-                    gap=b['gap'],
-                    vol_ratio=b['vol_ratio'],
-                    trail_percent=trail_pct,
-                    aum_m=b.get('aum_m', None),
-                    market_bias=b.get('market_bias'),
-                    spread_pct=b.get('spread_pct', 0.0)
-                )
-    else:
-        message += f"❌ No Valid ETF Identified\n"
-        message += f"⏰ Until next time!\n"
-
-    message += "\n\n<i>Automated informational signal. Not financial or trading advice.</i>"
-    print("\n" + "=" * 50)
-    print(f"⏱️ Total time: {elapsed:.1f}s")
-    print("📤 Sending Telegram...")
-    send_telegram(message)
-    print("=" * 50)
-
-    # --- AJOUT RUN STATUS : fin du run (run_active = False) via GitHub API ---
-    final_status = {
-        "phase": "terminé",
-        "progress": "✅ Terminé",
-        "current_ticker": "",
-        "last_action": "Run terminé",
-        "current_score": 0,
-        "timestamp": datetime.now(MONTREAL_TZ).strftime('%H:%M:%S'),
-        "run_active": False
-    }
-    content = json.dumps(final_status)
-    encoded = base64.b64encode(content.encode()).decode()
-    url = "https://api.github.com/repos/LuckyHT438/northsentinel-data/contents/run_status.json"
-    headers = {"Authorization": f"token {DATA_REPO_TOKEN}", "Accept": "application/vnd.github.v3+json"}
-    sha = None
-    try:
-        r = requests.get(url, headers=headers)
         if r.status_code == 200:
-            sha = r.json().get('sha')
+            data = r.json()
+            content = base64.b64decode(data["content"]).decode("utf-8")
+            return json.loads(content)
+        return None
     except:
-        pass
-    data = {"message": "Run terminé", "content": encoded, "branch": "main"}
-    if sha:
-        data["sha"] = sha
-    try:
-        requests.put(url, headers=headers, json=data, timeout=5)
-    except:
-        pass
-    # ------------------------------------------------------------
+        return None
 
-if __name__ == "__main__":
-    main()
+# --- AUTO-REFRESH INTELLIGENT ---
+run_status = fetch_run_status()
+run_active = run_status and run_status.get("run_active", False)
+
+if run_active:
+    st_autorefresh(interval=3000, key="live_refresh")
+else:
+    st_autorefresh(interval=30000, key="idle_refresh")
+
+# --- LIVE EXECUTION (corrigé pour gérer "initialisation") ---
+st.markdown("### 📡 Live Execution")
+
+if run_active:
+    phase = run_status.get("phase", "")
+    progress = run_status.get("progress", "0/0")
+    current_ticker = run_status.get("current_ticker", "")
+    last_action = run_status.get("last_action", "")
+    score = run_status.get("current_score", 0)
+    timestamp = run_status.get("timestamp", "")
+
+    # Déterminer le libellé de la phase
+    if phase == "initialisation":
+        phase_label = "🔄 Initialisation"
+    elif phase == "stocks":
+        phase_label = "📈 Stocks"
+    elif phase == "etfs":
+        phase_label = "📊 ETFs"
+    else:
+        phase_label = "📡 En cours"
+
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+    col1.metric("Phase", f"{phase_label} ({progress})")
+    col2.metric("Current Ticker", current_ticker if current_ticker else "—")
+    col3.metric("Status", last_action)
+    col4.metric("Score", f"{score}/9" if score > 0 else "—")
+
+    # Barre de progression (gère le cas total=0)
+    try:
+        prog_parts = progress.split('/')
+        if len(prog_parts) == 2:
+            current = int(prog_parts[0])
+            total = int(prog_parts[1])
+            if total > 0:
+                st.progress(current / total)
+            else:
+                st.progress(0.0)  # total=0, progression à 0%
+    except:
+        pass
+
+    st.caption(f"Last update: {timestamp}")
+    st.caption("🔄 Auto‑refresh: 3s")
+else:
+    st.info("🔹 No run in progress. Auto‑refresh toutes les 30s pour détecter les nouveaux signaux.")
+    st.caption("🔄 Auto‑refresh: 30s")
+
+st.divider()
+
+# --- SYSTEM STATUS (pour la sidebar) ---
+def get_system_status():
+    now = datetime.now(MONTREAL_TZ)
+    run_times = [
+        now.replace(hour=10, minute=0, second=0, microsecond=0),
+        now.replace(hour=10, minute=30, second=0, microsecond=0),
+        now.replace(hour=14, minute=55, second=0, microsecond=0),
+        now.replace(hour=15, minute=55, second=0, microsecond=0)
+    ]
+    next_run = None
+    for rt in run_times:
+        if rt > now:
+            next_run = rt
+            break
+    if next_run is None:
+        next_run = run_times[0] + timedelta(days=1)
+
+    signals = fetch_signals()
+    last_signal_time = None
+    if signals and isinstance(signals, list) and len(signals) > 0:
+        last_ts = signals[-1].get('timestamp')
+        if last_ts:
+            try:
+                last_signal_time = datetime.strptime(last_ts, '%Y-%m-%d %H:%M')
+                last_signal_time = MONTREAL_TZ.localize(last_signal_time)
+            except:
+                pass
+
+    if last_signal_time and (now - last_signal_time).total_seconds() / 60 < 3:
+        return "🟢", "Run in progress (latest signal recent)"
+
+    delta_next = next_run - now
+    hours = delta_next.seconds // 3600
+    minutes = (delta_next.seconds % 3600) // 60
+    return "🔵", f"Next run in {hours}h {minutes:02d}min"
+
+# --- SIDEBAR ---
+with st.sidebar:
+    status_emoji, status_msg = get_system_status()
+    st.markdown(f"### {status_emoji} Status")
+    st.markdown(f"*{status_msg}*")
+    st.markdown("---")
+    st.markdown("<h3 style='color: #F5A623;'>⚙️ Risk Parameters</h3>", unsafe_allow_html=True)
+    st.metric("Capital", "1 000 000 $")
+    st.metric("Max exposure / trade", "100 000 $")
+    st.metric("Risk / trade", "2 %")
+    st.metric("Max Stop-Loss", "2.5 %")
+    st.metric("Risk/Reward ratio", "1:2")
+    st.markdown("---")
+    st.markdown('<div class="sidebar-signout">', unsafe_allow_html=True)
+    if st.button("Sign out"):
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
+        st.rerun()
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
+
+# --- LATEST SETUPS (TABLEAU COMPLET) ---
+st.markdown("### 📋 Latest setups")
+
+signals = fetch_signals()
+
+if signals and isinstance(signals, list) and len(signals) > 0:
+    data_latest = []
+    for s in signals:
+        entry = s.get('entry_price', 0)
+        spread_pct = s.get('spread_pct', 0)
+        spread_usd = round((spread_pct / 100) * entry, 2) if entry > 0 else 0
+        cap_cat = s.get('cap_category', 'N/A')
+        market_bias = s.get('market_bias', '')
+        score = s.get('score', 0)
+        gap = s.get('gap', 0)
+        tp_mult = get_tp_multiplier(score, gap, cap_cat, market_bias, spread_pct)
+        sl_mult = get_sl_multiplier(score, cap_cat, market_bias, spread_pct)
+        tp_price = round(entry * tp_mult, 2)
+        sl_price = round(entry * sl_mult, 2)
+        trail_pct = s.get('trail_percent', 0)
+        trail_price = round(entry * (1 - trail_pct/100), 2) if trail_pct > 0 else 0
+
+        data_latest.append({
+            "Ticker": s.get('ticker', 'N/A'),
+            "Cap. cat.": cap_cat,
+            "Spread": f"{spread_pct:.2f}% (${spread_usd:.2f})",
+            "Entry": f"${entry:.2f}",
+            "TP": f"${tp_price:.2f}",
+            "SL": f"${sl_price:.2f}",
+            "Trailing Stop": f"${trail_price:.2f} ({trail_pct:.2f}%)"
+        })
+
+    df_latest = pd.DataFrame(data_latest)
+    st.dataframe(
+        df_latest,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Ticker": st.column_config.TextColumn("Ticker", width="small"),
+            "Cap. cat.": st.column_config.TextColumn("Cap. cat.", width="small"),
+            "Spread": st.column_config.TextColumn("Spread", width="small"),
+            "Entry": st.column_config.TextColumn("Entry", width="small"),
+            "TP": st.column_config.TextColumn("TP", width="small"),
+            "SL": st.column_config.TextColumn("SL", width="small"),
+            "Trailing Stop": st.column_config.TextColumn("Trailing Stop", width="medium")
+        }
+    )
+
+    # --- LAST SIGNAL DETAILS (tableau avec les autres métriques) ---
+    st.markdown("---")
+    st.markdown("### 🔍 Last signal details")
+    last = signals[-1]
+    detail_data = [{
+        "Score": last.get('score', 0),
+        "Gap": f"{last.get('gap', 0):.1f}%",
+        "Vol. ratio": f"{last.get('vol_ratio', 0):.1f}x",
+        "Market bias": last.get('market_bias', 'N/A'),
+        "Run time": last.get('timestamp', 'N/A')
+    }]
+    df_detail = pd.DataFrame(detail_data)
+    st.dataframe(
+        df_detail,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Score": st.column_config.NumberColumn("Score", width="small", alignment="left"),
+            "Gap": st.column_config.TextColumn("Gap", width="small"),
+            "Vol. ratio": st.column_config.TextColumn("Vol. ratio", width="small"),
+            "Market bias": st.column_config.TextColumn("Market bias", width="medium"),
+            "Run time": st.column_config.TextColumn("Run time", width="medium")
+        }
+    )
+
+else:
+    st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
+    st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
+
+st.divider()
+
+# --- LOGS SECTION ---
+st.markdown("### 📋 Run logs")
+if os.path.exists(LOG_FILE):
+    try:
+        with open(LOG_FILE, "r") as f:
+            log_lines = f.readlines()
+            if len(log_lines) > 50:
+                log_lines = log_lines[-50:]
+            log_text = "".join(log_lines)
+            st.code(log_text, language="log", line_numbers=False)
+            st.caption(f"Showing last {len(log_lines)} lines from {LOG_FILE}")
+    except Exception as e:
+        st.error(f"Error reading log file: {e}")
+else:
+    st.info("📭 No logs available yet.")
+    st.caption("Logs are stored locally and only visible when running in the same environment as the Core script.")
+
+# --- FOOTER ---
+st.divider()
+st.markdown(
+    "<p style='text-align: center; color: #666; font-size: 0.9rem;'>NorthSentinel CORE – Cockpit v2.0 – July, 2026 © NorthSentinel Trading</p>",
+    unsafe_allow_html=True
+)
