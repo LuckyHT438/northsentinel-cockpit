@@ -4,27 +4,15 @@ import os
 from datetime import datetime, timedelta
 import pandas as pd
 import pytz
-import time  # ← ajout pour l'auto‑refresh
+import requests  # ← ajout
+import time
 
-# --- MONTREAL TIMEZONE (AMERICA/TORONTO) ---
+# --- MONTREAL TIMEZONE ---
 MONTREAL_TZ = pytz.timezone('America/Toronto')
 
-# --- FILE DEFINITIONS (BEFORE ROTATION) ---
-SIGNAL_FILE = "core_signals_today.json"
-LOG_FILE = "core.log"
-
-# --- AUTOMATIC LOG ROTATION (once/day at midnight) ---
-if os.path.exists(LOG_FILE):
-    mtime = os.path.getmtime(LOG_FILE)
-    last_mod = datetime.fromtimestamp(mtime, MONTREAL_TZ)
-    now = datetime.now(MONTREAL_TZ)
-    today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    if last_mod < today_midnight:
-        archive_name = f"core_log_archive_{last_mod.strftime('%Y%m%d_%H%M%S')}.log"
-        os.rename(LOG_FILE, archive_name)
-        with open(LOG_FILE, 'w') as f:
-            pass
-        print(f"✅ Log archived: {archive_name}")
+# --- FICHIERS (désormais lus depuis GitHub) ---
+SIGNAL_FILE_URL = "https://raw.githubusercontent.com/LuckyHT438/northsentinel-data/main/core_signals_today.json"
+LOG_FILE = "core.log"  # toujours en local (pas critique)
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -34,32 +22,15 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- CUSTOM CSS (buttons, sidebar, etc.) ---
+# --- CSS (identique) ---
 st.markdown(
     """
     <style>
-        /* Reduce font size in sidebar */
-        .css-1d391kg, .css-12oz5g7, .css-1v3fvcr, .css-1v0mbdj {
-            font-size: 0.85rem !important;
-        }
-        /* Reduce metric font size */
-        [data-testid="stMetricValue"] {
-            font-size: 0.95rem !important;
-        }
-        [data-testid="stMetricLabel"] {
-            font-size: 0.8rem !important;
-        }
-        /* Titres des métriques en orange dans la sidebar */
-        section[data-testid="stSidebar"] [data-testid="stMetricLabel"] {
-            color: #F5A623 !important;
-        }
-        /* Reduce sidebar title */
-        .css-1v3fvcr h3 {
-            font-size: 1rem !important;
-        }
-
-        /* --- BUTTON STYLES --- */
-        /* "Sign in" button (login page) */
+        .css-1d391kg, .css-12oz5g7, .css-1v3fvcr, .css-1v0mbdj { font-size: 0.85rem !important; }
+        [data-testid="stMetricValue"] { font-size: 0.95rem !important; }
+        [data-testid="stMetricLabel"] { font-size: 0.8rem !important; }
+        section[data-testid="stSidebar"] [data-testid="stMetricLabel"] { color: #F5A623 !important; }
+        .css-1v3fvcr h3 { font-size: 1rem !important; }
         .stButton button {
             font-weight: bold !important;
             background-color: #F5A623 !important;
@@ -69,11 +40,7 @@ st.markdown(
             padding: 0.5rem 1rem !important;
             font-size: 1rem !important;
         }
-        .stButton button:hover {
-            background-color: #e0951a !important;
-            color: #0E1117 !important;
-        }
-        /* "Sign out" button in sidebar (auto width) */
+        .stButton button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
         .sidebar-signout button {
             font-weight: bold !important;
             background-color: #F5A623 !important;
@@ -84,16 +51,13 @@ st.markdown(
             font-size: 0.9rem !important;
             width: auto !important;
         }
-        .sidebar-signout button:hover {
-            background-color: #e0951a !important;
-            color: #0E1117 !important;
-        }
+        .sidebar-signout button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-# --- AUTHENTICATION ---
+# --- AUTHENTIFICATION ---
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
@@ -112,7 +76,7 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- HEADER WITH LOGO (fallback si fichier absent) ---
+# --- HEADER ---
 col1, col2 = st.columns([1, 5])
 with col1:
     try:
@@ -125,68 +89,31 @@ with col2:
 
 st.divider()
 
-# --- LIVE EXECUTION SECTION ---
-st.markdown("### 📡 Live Execution")
-
-# --- READ CURRENT RUN STATUS ---
-RUN_STATUS_FILE = "run_status.json"
-
-def get_run_status():
-    if os.path.exists(RUN_STATUS_FILE):
-        try:
-            with open(RUN_STATUS_FILE, "r") as f:
-                return json.load(f)
-        except:
-            return None
-    return None
-
-run_status = get_run_status()
-
-if run_status and run_status.get("run_active", False):
-    phase = "📈 Stocks" if run_status.get("phase") == "stocks" else "📊 ETFs"
-    progress = run_status.get("progress", "0/0")
-    current_ticker = run_status.get("current_ticker", "")
-    last_action = run_status.get("last_action", "")
-    score = run_status.get("current_score", 0)
-    timestamp = run_status.get("timestamp", "")
-    
-    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
-    col1.metric("Phase", f"{phase} ({progress})")
-    col2.metric("Current Ticker", current_ticker if current_ticker else "—")
-    col3.metric("Status", last_action)
-    col4.metric("Score", f"{score}/9" if score > 0 else "—")
-    
-    # Progress bar (if progress is "X/Y" format)
+# --- FONCTION POUR RÉCUPÉRER LES SIGNAUX DEPUIS GITHUB ---
+@st.cache_data(ttl=30)
+def fetch_signals():
     try:
-        prog_parts = progress.split('/')
-        if len(prog_parts) == 2:
-            current = int(prog_parts[0])
-            total = int(prog_parts[1])
-            st.progress(current / total if total > 0 else 0)
+        response = requests.get(SIGNAL_FILE_URL, timeout=5)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            return []
     except:
-        pass
-    
-    st.caption(f"Last update: {timestamp}")
-    st.caption("🔄 Auto‑refresh: 3s")
-    time.sleep(3)
-    st.rerun()
-else:
-    st.info("🔹 No run in progress. Runs are scheduled at the usual times (10:00, 10:30, 14:55, 15:55).")
-    st.caption("Updates will appear automatically once a run starts.")
+        return []
 
-# --- SYSTEM STATUS FUNCTION (2 states - CORRECTED) ---
+# --- LIVE EXECUTION (adapté) ---
+st.markdown("### 📡 Live Execution")
+st.info("🔹 Le suivi en direct est actuellement en développement. Les signaux seront disponibles après chaque run (fichier poussé vers le dépôt de données).")
+
+# --- SYSTEM STATUS FUNCTION ---
 def get_system_status():
     now = datetime.now(MONTREAL_TZ)
-    
-    # Run times (local time)
     run_times = [
         now.replace(hour=10, minute=0, second=0, microsecond=0),
         now.replace(hour=10, minute=30, second=0, microsecond=0),
         now.replace(hour=14, minute=55, second=0, microsecond=0),
         now.replace(hour=15, minute=55, second=0, microsecond=0)
     ]
-    
-    # Find next run
     next_run = None
     for rt in run_times:
         if rt > now:
@@ -194,37 +121,29 @@ def get_system_status():
             break
     if next_run is None:
         next_run = run_times[0] + timedelta(days=1)
-    
-    # Read last signal (with robust error handling)
+
+    signals = fetch_signals()
     last_signal_time = None
-    if os.path.exists(SIGNAL_FILE):
-        try:
-            with open(SIGNAL_FILE, 'r') as f:
-                content = f.read().strip()
-                if content:
-                    signals = json.loads(content)
-                    if signals and isinstance(signals, list) and len(signals) > 0:
-                        last_ts = signals[-1].get('timestamp')
-                        if last_ts:
-                            last_signal_time = datetime.strptime(last_ts, '%Y-%m-%d %H:%M')
-                            last_signal_time = MONTREAL_TZ.localize(last_signal_time)
-        except (json.JSONDecodeError, ValueError, IndexError):
-            # File is empty or malformed → ignore
-            pass
-    
-    # Determine status (only 2 states)
+    if signals and isinstance(signals, list) and len(signals) > 0:
+        last_ts = signals[-1].get('timestamp')
+        if last_ts:
+            try:
+                last_signal_time = datetime.strptime(last_ts, '%Y-%m-%d %H:%M')
+                last_signal_time = MONTREAL_TZ.localize(last_signal_time)
+            except:
+                pass
+
     if last_signal_time:
         delta_minutes = (now - last_signal_time).total_seconds() / 60
         if delta_minutes < 3:
-            return "🟢", "Run in progress"
-    
-    # If no run in progress, show next run
+            return "🟢", "Run in progress (latest signal recent)"
+
     delta_next = next_run - now
     hours = delta_next.seconds // 3600
     minutes = (delta_next.seconds % 3600) // 60
     return "🔵", f"Next run in {hours}h {minutes:02d}min"
 
-# --- SIDEBAR (PARAMETERS + STATUS) ---
+# --- SIDEBAR ---
 with st.sidebar:
     status_emoji, status_msg = get_system_status()
     st.markdown(f"### {status_emoji} Status")
@@ -237,48 +156,33 @@ with st.sidebar:
     st.metric("Max Stop-Loss", "2.5 %")
     st.metric("Risk/Reward ratio", "1:2")
     st.markdown("---")
-    
-    # --- SIGN OUT BUTTON ---
     st.markdown('<div class="sidebar-signout">', unsafe_allow_html=True)
     if st.button("Sign out"):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
-    
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- READ SIGNALS (for main display) ---
-signals = []
-if os.path.exists(SIGNAL_FILE):
-    with open(SIGNAL_FILE, "r") as f:
-        try:
-            signals = json.load(f)
-        except:
-            signals = []
-else:
-    st.warning("⚠️ No signal file found.")
-
-# --- MAIN METRICS ---
-if signals:
+# --- MAIN METRICS (depuis GitHub) ---
+signals = fetch_signals()
+if signals and isinstance(signals, list) and len(signals) > 0:
     signals = signals[-10:][::-1]
     total = len(signals)
     avg_score = sum(s.get("score", 0) for s in signals) / total if total > 0 else 0
-    
     col_met1, col_met2, col_met3, col_met4 = st.columns(4)
     col_met1.metric("📊 Recent signals", total)
     col_met2.metric("⭐ Average score", f"{avg_score:.1f}/9" if avg_score > 0 else "N/A")
     col_met3.metric("📈 Best score", max([s.get("score", 0) for s in signals]) if signals else "N/A")
     col_met4.metric("🔄 Last signal", signals[0].get("ticker", "N/A") if signals else "N/A")
 else:
-    st.info("No signals saved yet. Signals will appear after the first Core script execution.")
+    st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
 
 st.divider()
 
 # --- SIGNALS TABLE ---
 st.markdown("### 📋 Latest setups")
-
-if signals:
+if signals and isinstance(signals, list) and len(signals) > 0:
     data = []
     for s in signals:
         data.append({
@@ -292,7 +196,6 @@ if signals:
             "Timestamp": s.get("timestamp", "N/A")
         })
     df = pd.DataFrame(data)
-    
     def color_score(val):
         if val >= 7:
             return 'background-color: #1a5e1a; color: white;'
@@ -300,7 +203,6 @@ if signals:
             return 'background-color: #b8860b; color: white;'
         else:
             return 'background-color: #5e1a1a; color: white;'
-    
     styled_df = df.style.applymap(color_score, subset=['Score'])
     st.dataframe(styled_df, use_container_width=True, height=400)
 
@@ -326,9 +228,8 @@ else:
 
 st.divider()
 
-# --- LOGS SECTION ---
+# --- LOGS SECTION (inchangé) ---
 st.markdown("### 📋 Run logs")
-
 if os.path.exists(LOG_FILE):
     try:
         with open(LOG_FILE, "r") as f:
@@ -341,8 +242,8 @@ if os.path.exists(LOG_FILE):
     except Exception as e:
         st.error(f"Error reading log file: {e}")
 else:
-    st.info("📭 No logs available yet. Logs will appear after the first Core script execution.")
-    st.caption("Tip: redirect Core script output to `core.log` to see logs here.")
+    st.info("📭 No logs available yet.")
+    st.caption("Logs are stored locally and only visible when running in the same environment as the Core script.")
 
 # --- FOOTER ---
 st.divider()
