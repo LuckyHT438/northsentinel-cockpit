@@ -117,7 +117,7 @@ with col1:
     st.image("assets/logo_northsentinel_core.png", width=120)
 with col2:
     st.markdown("<h1 style='color: #F5A623; margin-bottom: 0;'>NorthSentinel CORE</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #AAAAAA; margin-top: 0; font-size: 1.2rem;'>Real‑time system monitoring cockpit —— Beta</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #AAAAAA; margin-top: 0; font-size: 1.2rem;'>Real‑time system monitoring cockpit — Beta</p>", unsafe_allow_html=True)
 
 st.divider()
 
