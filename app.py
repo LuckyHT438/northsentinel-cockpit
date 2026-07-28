@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 import pytz
 import requests
-import base64  # pour décoder le contenu de l'API GitHub
+import base64
 
 # --- MONTREAL TIMEZONE ---
 MONTREAL_TZ = pytz.timezone('America/Toronto')
@@ -21,7 +21,7 @@ st.set_page_config(
     page_title="NorthSentinel CORE",
     page_icon="📊",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"  # On garde la sidebar mais on peut la réduire
 )
 
 # --- CSS ---
@@ -91,41 +91,27 @@ with col2:
 
 st.divider()
 
-# --- FONCTIONS DE LECTURE AVEC TOKEN GITHUB ---
-@st.cache_data(ttl=10)  # cache court pour détecter les nouveaux signaux
+# --- FONCTIONS DE LECTURE AVEC TOKEN ---
+@st.cache_data(ttl=15)
 def fetch_signals():
-    """
-    Récupère le fichier core_signals_today.json via l'API GitHub (authentifiée).
-    """
     token = st.secrets.get("GITHUB_TOKEN", "")
     if not token:
-        st.error("🚨 GITHUB_TOKEN manquant dans les secrets Streamlit.")
+        st.error("🚨 GITHUB_TOKEN manquant.")
         return []
-
     try:
         url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_PATH}"
-        headers = {
-            "Authorization": f"token {token}",
-            "Accept": "application/vnd.github.v3+json"
-        }
+        headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
         r = requests.get(url, headers=headers, timeout=5)
         if r.status_code == 200:
             data = r.json()
-            # Le contenu est encodé en base64
             content = base64.b64decode(data["content"]).decode("utf-8")
             signals = json.loads(content)
-            if isinstance(signals, list) and len(signals) > 0:
-                return signals
-            else:
-                return []
+            return signals if isinstance(signals, list) else []
         elif r.status_code == 404:
-            # Le fichier n'existe pas encore -> pas d'erreur
             return []
         else:
-            st.error(f"Erreur GitHub API : {r.status_code}")
             return []
-    except Exception as e:
-        st.error(f"Erreur lors de la récupération : {e}")
+    except:
         return []
 
 def fetch_run_status():
@@ -137,12 +123,20 @@ def fetch_run_status():
     except:
         return None
 
-# --- LIVE EXECUTION SECTION ---
+# --- BOUTON DE RAFFRAÎCHISSEMENT MANUEL ---
+col_refresh, _ = st.columns([1, 5])
+with col_refresh:
+    if st.button("🔄 Refresh signals now"):
+        st.cache_data.clear()
+        st.rerun()
+
+# --- LIVE EXECUTION ---
 st.markdown("### 📡 Live Execution")
 
 run_status = fetch_run_status()
+run_active = run_status and run_status.get("run_active", False)
 
-if run_status and run_status.get("run_active", False):
+if run_active:
     phase = "📈 Stocks" if run_status.get("phase") == "stocks" else "📊 ETFs"
     progress = run_status.get("progress", "0/0")
     current_ticker = run_status.get("current_ticker", "")
@@ -169,40 +163,12 @@ if run_status and run_status.get("run_active", False):
     st.caption("🔄 Auto‑refresh: 3s")
     st.markdown('<meta http-equiv="refresh" content="3">', unsafe_allow_html=True)
 else:
-    st.info("🔹 No run in progress. Next run is scheduled at the usual times (10:00, 10:30, 14:55, 15:55).")
-    st.caption("🔄 Auto‑refresh: 30s (checking for new signals)")
-    st.markdown('<meta http-equiv="refresh" content="30">', unsafe_allow_html=True)
+    st.info("🔹 No run in progress. Click 'Refresh signals now' to check for new signals.")
+    # Pas de refresh automatique en dehors des runs
 
 st.divider()
 
-# --- BOUTON DE DÉBOGAGE (pour forcer le rechargement) ---
-with st.expander("🔧 Debug tools"):
-    if st.button("🐞 Force refresh cache (clear)"):
-        st.cache_data.clear()
-        st.rerun()
-    
-    token_status = "✅ Présent" if st.secrets.get("GITHUB_TOKEN") else "❌ Manquant"
-    st.caption(f"Token GitHub : {token_status}")
-
-    if st.button("🐞 Show raw content of core_signals_today.json (API)"):
-        try:
-            token = st.secrets.get("GITHUB_TOKEN", "")
-            if not token:
-                st.error("Token manquant")
-            else:
-                url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_PATH}"
-                headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
-                r = requests.get(url, headers=headers)
-                if r.status_code == 200:
-                    data = r.json()
-                    content = base64.b64decode(data["content"]).decode("utf-8")
-                    st.code(content, language="json")
-                else:
-                    st.error(f"HTTP {r.status_code} - {r.text}")
-        except Exception as e:
-            st.error(f"Erreur : {e}")
-
-# --- SYSTEM STATUS FUNCTION ---
+# --- SYSTEM STATUS (pour la sidebar) ---
 def get_system_status():
     now = datetime.now(MONTREAL_TZ)
     run_times = [
@@ -230,10 +196,8 @@ def get_system_status():
             except:
                 pass
 
-    if last_signal_time:
-        delta_minutes = (now - last_signal_time).total_seconds() / 60
-        if delta_minutes < 3:
-            return "🟢", "Run in progress (latest signal recent)"
+    if last_signal_time and (now - last_signal_time).total_seconds() / 60 < 3:
+        return "🟢", "Run in progress (latest signal recent)"
 
     delta_next = next_run - now
     hours = delta_next.seconds // 3600
@@ -261,26 +225,23 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- MAIN METRICS ---
+# --- MAIN METRICS & TABLE ---
 signals = fetch_signals()
+
 if signals and isinstance(signals, list) and len(signals) > 0:
     signals_display = signals[-10:][::-1]
     total = len(signals_display)
     avg_score = sum(s.get("score", 0) for s in signals_display) / total if total > 0 else 0
+
     col_met1, col_met2, col_met3, col_met4 = st.columns(4)
     col_met1.metric("📊 Recent signals", total)
     col_met2.metric("⭐ Average score", f"{avg_score:.1f}/9" if avg_score > 0 else "N/A")
     col_met3.metric("📈 Best score", max([s.get("score", 0) for s in signals_display]) if signals_display else "N/A")
     col_met4.metric("🔄 Last signal", signals_display[0].get("ticker", "N/A") if signals_display else "N/A")
-else:
-    st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
-    st.caption("💡 Si un signal a été généré et n'apparaît pas, utilisez le bouton 'Force refresh cache' dans la section Debug ci‑dessous.")
 
-st.divider()
+    st.divider()
+    st.markdown("### 📋 Latest setups")
 
-# --- SIGNALS TABLE ---
-st.markdown("### 📋 Latest setups")
-if signals and isinstance(signals, list) and len(signals) > 0:
     data = []
     for s in signals:
         data.append({
@@ -294,6 +255,7 @@ if signals and isinstance(signals, list) and len(signals) > 0:
             "Timestamp": s.get("timestamp", "N/A")
         })
     df = pd.DataFrame(data)
+
     def color_score(val):
         if val >= 7:
             return 'background-color: #1a5e1a; color: white;'
@@ -301,7 +263,8 @@ if signals and isinstance(signals, list) and len(signals) > 0:
             return 'background-color: #b8860b; color: white;'
         else:
             return 'background-color: #5e1a1a; color: white;'
-    styled_df = df.style.applymap(color_score, subset=['Score'])
+
+    styled_df = df.style.map(color_score, subset=['Score'])
     st.dataframe(styled_df, use_container_width=True, height=400)
 
     st.markdown("---")
@@ -321,8 +284,10 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         st.caption(f"Capitalization: {last.get('cap_category')}")
     if last.get("market_bias"):
         st.caption(f"Market bias: {last.get('market_bias')}")
+
 else:
-    st.info("Awaiting the first signals...")
+    st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
+    st.caption("💡 Utilisez le bouton 'Refresh signals now' pour forcer le rechargement.")
 
 st.divider()
 
