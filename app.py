@@ -5,12 +5,14 @@ from datetime import datetime, timedelta
 import pandas as pd
 import pytz
 import requests
+import base64  # pour décoder le contenu de l'API GitHub
 
 # --- MONTREAL TIMEZONE ---
 MONTREAL_TZ = pytz.timezone('America/Toronto')
 
-# --- FICHIERS (lus depuis GitHub) ---
-SIGNAL_FILE_URL = "https://raw.githubusercontent.com/LuckyHT438/northsentinel-data/main/core_signals_today.json"
+# --- FICHIERS (via API GitHub avec token) ---
+GITHUB_REPO = "LuckyHT438/northsentinel-data"
+GITHUB_PATH = "core_signals_today.json"
 RUN_STATUS_URL = "https://raw.githubusercontent.com/LuckyHT438/northsentinel-data/main/run_status.json"
 LOG_FILE = "core.log"
 
@@ -89,21 +91,41 @@ with col2:
 
 st.divider()
 
-# --- FONCTIONS DE LECTURE ---
-@st.cache_data(ttl=5)  # cache très court (5s) pour les tests
+# --- FONCTIONS DE LECTURE AVEC TOKEN GITHUB ---
+@st.cache_data(ttl=10)  # cache court pour détecter les nouveaux signaux
 def fetch_signals():
+    """
+    Récupère le fichier core_signals_today.json via l'API GitHub (authentifiée).
+    """
+    token = st.secrets.get("GITHUB_TOKEN", "")
+    if not token:
+        st.error("🚨 GITHUB_TOKEN manquant dans les secrets Streamlit.")
+        return []
+
     try:
-        r = requests.get(SIGNAL_FILE_URL, timeout=5)
+        url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_PATH}"
+        headers = {
+            "Authorization": f"token {token}",
+            "Accept": "application/vnd.github.v3+json"
+        }
+        r = requests.get(url, headers=headers, timeout=5)
         if r.status_code == 200:
             data = r.json()
-            # Vérifier que c'est une liste non vide
-            if isinstance(data, list) and len(data) > 0:
-                return data
+            # Le contenu est encodé en base64
+            content = base64.b64decode(data["content"]).decode("utf-8")
+            signals = json.loads(content)
+            if isinstance(signals, list) and len(signals) > 0:
+                return signals
             else:
                 return []
-        else:
+        elif r.status_code == 404:
+            # Le fichier n'existe pas encore -> pas d'erreur
             return []
-    except:
+        else:
+            st.error(f"Erreur GitHub API : {r.status_code}")
+            return []
+    except Exception as e:
+        st.error(f"Erreur lors de la récupération : {e}")
         return []
 
 def fetch_run_status():
@@ -153,19 +175,30 @@ else:
 
 st.divider()
 
-# --- BOUTON DE DÉBOGAGE ---
+# --- BOUTON DE DÉBOGAGE (pour forcer le rechargement) ---
 with st.expander("🔧 Debug tools"):
     if st.button("🐞 Force refresh cache (clear)"):
         st.cache_data.clear()
         st.rerun()
     
-    if st.button("🐞 Show raw content of core_signals_today.json"):
+    token_status = "✅ Présent" if st.secrets.get("GITHUB_TOKEN") else "❌ Manquant"
+    st.caption(f"Token GitHub : {token_status}")
+
+    if st.button("🐞 Show raw content of core_signals_today.json (API)"):
         try:
-            r = requests.get(SIGNAL_FILE_URL)
-            if r.status_code == 200:
-                st.code(r.text, language="json")
+            token = st.secrets.get("GITHUB_TOKEN", "")
+            if not token:
+                st.error("Token manquant")
             else:
-                st.error(f"HTTP {r.status_code}")
+                url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_PATH}"
+                headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+                r = requests.get(url, headers=headers)
+                if r.status_code == 200:
+                    data = r.json()
+                    content = base64.b64decode(data["content"]).decode("utf-8")
+                    st.code(content, language="json")
+                else:
+                    st.error(f"HTTP {r.status_code} - {r.text}")
         except Exception as e:
             st.error(f"Erreur : {e}")
 
@@ -231,14 +264,14 @@ with st.sidebar:
 # --- MAIN METRICS ---
 signals = fetch_signals()
 if signals and isinstance(signals, list) and len(signals) > 0:
-    signals = signals[-10:][::-1]
-    total = len(signals)
-    avg_score = sum(s.get("score", 0) for s in signals) / total if total > 0 else 0
+    signals_display = signals[-10:][::-1]
+    total = len(signals_display)
+    avg_score = sum(s.get("score", 0) for s in signals_display) / total if total > 0 else 0
     col_met1, col_met2, col_met3, col_met4 = st.columns(4)
     col_met1.metric("📊 Recent signals", total)
     col_met2.metric("⭐ Average score", f"{avg_score:.1f}/9" if avg_score > 0 else "N/A")
-    col_met3.metric("📈 Best score", max([s.get("score", 0) for s in signals]) if signals else "N/A")
-    col_met4.metric("🔄 Last signal", signals[0].get("ticker", "N/A") if signals else "N/A")
+    col_met3.metric("📈 Best score", max([s.get("score", 0) for s in signals_display]) if signals_display else "N/A")
+    col_met4.metric("🔄 Last signal", signals_display[0].get("ticker", "N/A") if signals_display else "N/A")
 else:
     st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
     st.caption("💡 Si un signal a été généré et n'apparaît pas, utilisez le bouton 'Force refresh cache' dans la section Debug ci‑dessous.")
