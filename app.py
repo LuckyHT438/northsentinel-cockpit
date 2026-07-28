@@ -125,9 +125,9 @@ run_status = fetch_run_status()
 run_active = run_status and run_status.get("run_active", False)
 
 if run_active:
-    st_autorefresh(interval=3000, key="live_refresh")   # 3s
+    st_autorefresh(interval=3000, key="live_refresh")
 else:
-    st_autorefresh(interval=30000, key="idle_refresh")  # 30s
+    st_autorefresh(interval=30000, key="idle_refresh")
 
 # --- LIVE EXECUTION ---
 st.markdown("### 📡 Live Execution")
@@ -220,14 +220,13 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- TABLEAU DES SIGNAUX (ordre chronologique : le plus ancien en haut, le plus récent en bas) ---
+# --- TABLEAU DES SIGNAUX ---
 st.markdown("### 📋 Latest setups")
 
 signals = fetch_signals()
 
 if signals and isinstance(signals, list) and len(signals) > 0:
-    # On garde l'ordre original : les signaux sont stockés du plus ancien au plus récent
-    # Chaque nouveau signal s'ajoute à la fin du fichier, donc en bas du tableau
+    # Construction des données
     data = []
     for s in signals:
         data.append({
@@ -242,21 +241,21 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         })
     df = pd.DataFrame(data)
 
-    # --- STYLE PROFESSIONNEL (sans couleur sur Score, sans colonne d'index) ---
+    # --- SUPPRESSION DE LA COLONNE INDEX ---
     styled_df = df.style.set_table_styles([
         {'selector': 'thead tr th', 'props': [('background-color', '#2a2a2a'), ('color', 'white'), ('font-weight', 'bold'), ('text-align', 'center')]},
         {'selector': 'tbody tr:nth-child(even)', 'props': [('background-color', '#1e1e1e')]},
         {'selector': 'tbody tr:nth-child(odd)', 'props': [('background-color', '#262626')]},
-        {'selector': 'td', 'props': [('padding', '8px'), ('border', '1px solid #444'), ('text-align', 'center')]},
-        {'selector': 'th', 'props': [('padding', '8px'), ('border', '1px solid #444'), ('text-align', 'center')]}
-    ]).hide(axis='index')  # cache la colonne d'index (numéros de ligne)
+        {'selector': 'td', 'props': [('padding', '8px'), ('text-align', 'center')]},   # PAS DE BORDURE
+        {'selector': 'th', 'props': [('padding', '8px'), ('text-align', 'center')]}    # PAS DE BORDURE
+    ]).hide(axis='index')
 
     st.dataframe(styled_df, use_container_width=True, height=400)
 
-    # --- Détail du dernier signal (le plus récent, donc le dernier de la liste) ---
+    # --- Détail du dernier signal ---
     st.markdown("---")
     st.markdown("### 🔍 Last signal details")
-    last = signals[-1]  # le plus récent est en dernier
+    last = signals[-1]
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Ticker", last.get("ticker", "N/A"))
