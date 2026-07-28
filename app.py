@@ -55,6 +55,19 @@ st.markdown(
             width: auto !important;
         }
         .sidebar-signout button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
+        /* Supprimer les bordures des tableaux Streamlit */
+        .stDataFrame {
+            border: none !important;
+        }
+        .stDataFrame table {
+            border-collapse: collapse !important;
+        }
+        .stDataFrame th, .stDataFrame td {
+            border: none !important;
+        }
+        .stDataFrame th {
+            font-weight: bold !important;
+        }
     </style>
     """,
     unsafe_allow_html=True
@@ -220,13 +233,14 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
+# --- LECTURE DES SIGNAUX ---
+signals = fetch_signals()
+
 # --- LATEST SETUPS (TABLEAU SANS BORDURES) ---
 st.markdown("### 📋 Latest setups")
 
-signals = fetch_signals()
-
 if signals and isinstance(signals, list) and len(signals) > 0:
-    # Préparer les données
+    # Préparer les données pour le tableau principal
     data = []
     for s in signals:
         data.append({
@@ -237,34 +251,16 @@ if signals and isinstance(signals, list) and len(signals) > 0:
             "Market Bias": s.get("market_bias", "N/A"),
             "Run Time": s.get("timestamp", "N/A")
         })
-    df = pd.DataFrame(data)
+    df_all = pd.DataFrame(data)
 
-    # CSS pour supprimer les bordures et mettre le titre en gras
-    st.markdown(
-        """
-        <style>
-        .no-border-table {
-            border: none !important;
-        }
-        .no-border-table td, .no-border-table th {
-            border: none !important;
-        }
-        .no-border-table th {
-            font-weight: bold !important;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
-    # Afficher le tableau sans bordures
+    # Afficher le tableau complet sans bordures
     st.dataframe(
-        df,
+        df_all,
         use_container_width=True,
         hide_index=True,
         column_config={
             "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-            "Score": st.column_config.NumberColumn("Score", width="small"),
+            "Score": st.column_config.NumberColumn("Score", width="small", alignment="left"),  # Score aligné à gauche
             "Gap": st.column_config.TextColumn("Gap", width="small"),
             "Vol Ratio": st.column_config.TextColumn("Vol Ratio", width="small"),
             "Market Bias": st.column_config.TextColumn("Market Bias", width="medium"),
@@ -272,24 +268,34 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         }
     )
 
-    # --- Détail du dernier signal (inchangé) ---
     st.markdown("---")
     st.markdown("### 🔍 Last signal details")
-    last = signals[-1]
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Ticker", last.get("ticker", "N/A"))
-        st.metric("Type", last.get("type", "STOCK"))
-    with col2:
-        st.metric("Entry Price", f"${last.get('entry_price', 0):.2f}")
-        st.metric("Score", f"{last.get('score', 0)}/9" if last.get("type")=="STOCK" else f"{last.get('score', 0)}/5")
-    with col3:
-        st.metric("GAP", f"{last.get('gap', 0):.1f}%")
-        st.metric("Trailing Stop", f"{last.get('trail_percent', 0):.2f}%")
-    if last.get("cap_category"):
-        st.caption(f"Capitalization: {last.get('cap_category')}")
-    if last.get("market_bias"):
-        st.caption(f"Market bias: {last.get('market_bias')}")
+
+    # --- DERNIER SIGNAL (TABLEAU 1 LIGNE) ---
+    last = signals[-1]  # dernier signal ajouté (le plus récent)
+    data_last = [{
+        "Ticker": last.get("ticker", "N/A"),
+        "Score": last.get("score", 0),
+        "Gap": f"{last.get('gap', 0):.1f}%",
+        "Vol Ratio": f"{last.get('vol_ratio', 0):.1f}x",
+        "Market Bias": last.get("market_bias", "N/A"),
+        "Run Time": last.get("timestamp", "N/A")
+    }]
+    df_last = pd.DataFrame(data_last)
+
+    st.dataframe(
+        df_last,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Ticker": st.column_config.TextColumn("Ticker", width="small"),
+            "Score": st.column_config.NumberColumn("Score", width="small", alignment="left"),
+            "Gap": st.column_config.TextColumn("Gap", width="small"),
+            "Vol Ratio": st.column_config.TextColumn("Vol Ratio", width="small"),
+            "Market Bias": st.column_config.TextColumn("Market Bias", width="medium"),
+            "Run Time": st.column_config.TextColumn("Run Time", width="medium")
+        }
+    )
 
 else:
     st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
