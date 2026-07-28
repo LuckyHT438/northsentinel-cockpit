@@ -220,34 +220,58 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- LATEST SETUPS (VERSION SIMPLIFIÉE : ticker, score, gap, vol ratio, market bias, timestamp) ---
+# --- LATEST SETUPS (TABLEAU SANS BORDURES) ---
 st.markdown("### 📋 Latest setups")
 
 signals = fetch_signals()
 
 if signals and isinstance(signals, list) and len(signals) > 0:
-    for idx, s in enumerate(signals):
-        if idx > 0:
-            st.markdown("---")
-        
-        # Première ligne : Ticker (sans type), Score, Gap
-        col1, col2, col3 = st.columns([1.5, 1, 1])
-        with col1:
-            st.markdown(f"**{s.get('ticker', 'N/A')}**")
-        with col2:
-            st.metric("Score", f"{s.get('score', 0)}/9" if s.get('type') == 'STOCK' else f"{s.get('score', 0)}/5")
-        with col3:
-            st.metric("GAP", f"{s.get('gap', 0):.1f}%")
-        
-        # Deuxième ligne : Vol Ratio, Market Bias, Timestamp
-        col4, col5, col6 = st.columns([1, 1.5, 1.5])
-        with col4:
-            st.caption(f"Vol Ratio: {s.get('vol_ratio', 0):.1f}x")
-        with col5:
-            st.caption(f"Market Bias: {s.get('market_bias', 'N/A')}")
-        with col6:
-            st.caption(f"Run: {s.get('timestamp', 'N/A')}")
-    
+    # Préparer les données
+    data = []
+    for s in signals:
+        data.append({
+            "Ticker": s.get("ticker", "N/A"),
+            "Score": s.get("score", 0),
+            "Gap": f"{s.get('gap', 0):.1f}%",
+            "Vol Ratio": f"{s.get('vol_ratio', 0):.1f}x",
+            "Market Bias": s.get("market_bias", "N/A"),
+            "Run Time": s.get("timestamp", "N/A")
+        })
+    df = pd.DataFrame(data)
+
+    # CSS pour supprimer les bordures et mettre le titre en gras
+    st.markdown(
+        """
+        <style>
+        .no-border-table {
+            border: none !important;
+        }
+        .no-border-table td, .no-border-table th {
+            border: none !important;
+        }
+        .no-border-table th {
+            font-weight: bold !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    # Afficher le tableau sans bordures
+    st.dataframe(
+        df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Ticker": st.column_config.TextColumn("Ticker", width="small"),
+            "Score": st.column_config.NumberColumn("Score", width="small"),
+            "Gap": st.column_config.TextColumn("Gap", width="small"),
+            "Vol Ratio": st.column_config.TextColumn("Vol Ratio", width="small"),
+            "Market Bias": st.column_config.TextColumn("Market Bias", width="medium"),
+            "Run Time": st.column_config.TextColumn("Run Time", width="medium")
+        }
+    )
+
     # --- Détail du dernier signal (inchangé) ---
     st.markdown("---")
     st.markdown("### 🔍 Last signal details")
