@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 import pandas as pd
 import pytz
 import requests
-import time
 
 # --- MONTREAL TIMEZONE ---
 MONTREAL_TZ = pytz.timezone('America/Toronto')
@@ -13,7 +12,7 @@ MONTREAL_TZ = pytz.timezone('America/Toronto')
 # --- FICHIERS (lus depuis GitHub) ---
 SIGNAL_FILE_URL = "https://raw.githubusercontent.com/LuckyHT438/northsentinel-data/main/core_signals_today.json"
 RUN_STATUS_URL = "https://raw.githubusercontent.com/LuckyHT438/northsentinel-data/main/run_status.json"
-LOG_FILE = "core.log"  # en local (non critique)
+LOG_FILE = "core.log"
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
@@ -90,16 +89,14 @@ with col2:
 
 st.divider()
 
-# --- FONCTIONS DE LECTURE (SANS AFFICHAGE D'ERREUR 404) ---
-@st.cache_data(ttl=10)  # cache court pour permettre la détection de nouveaux signaux
+# --- FONCTIONS DE LECTURE ---
+@st.cache_data(ttl=10)
 def fetch_signals():
     try:
         r = requests.get(SIGNAL_FILE_URL, timeout=5)
         if r.status_code == 200:
             return r.json()
-        else:
-            # Si 404 ou autre, on retourne simplement []
-            return []
+        return []
     except:
         return []
 
@@ -112,7 +109,7 @@ def fetch_run_status():
     except:
         return None
 
-# --- LIVE EXECUTION SECTION (auto‑refresh 3s si run actif) ---
+# --- LIVE EXECUTION SECTION (auto‑refresh NON bloquant) ---
 st.markdown("### 📡 Live Execution")
 
 run_status = fetch_run_status()
@@ -142,13 +139,13 @@ if run_status and run_status.get("run_active", False):
     
     st.caption(f"Last update: {timestamp}")
     st.caption("🔄 Auto‑refresh: 3s")
-    time.sleep(3)
-    st.rerun()
+    # Refresh toutes les 3 secondes pendant un run
+    st.markdown('<meta http-equiv="refresh" content="3">', unsafe_allow_html=True)
 else:
     st.info("🔹 No run in progress. Next run is scheduled at the usual times (10:00, 10:30, 14:55, 15:55).")
     st.caption("🔄 Auto‑refresh: 30s (checking for new signals)")
-    time.sleep(30)
-    st.rerun()
+    # Refresh toutes les 30 secondes entre les runs
+    st.markdown('<meta http-equiv="refresh" content="30">', unsafe_allow_html=True)
 
 st.divider()
 
@@ -211,7 +208,7 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- MAIN METRICS (depuis GitHub) ---
+# --- MAIN METRICS ---
 signals = fetch_signals()
 if signals and isinstance(signals, list) and len(signals) > 0:
     signals = signals[-10:][::-1]
