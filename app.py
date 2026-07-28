@@ -52,6 +52,32 @@ st.markdown(
         .css-1v3fvcr h3 {
             font-size: 1rem !important;
         }
+
+        /* ---- STYLE DES BOUTONS (Connexion / Déconnexion) ---- */
+        /* Boutons primaires (pleins) */
+        div.stButton > button[kind="primary"] {
+            background-color: #F5A623 !important;
+            color: #000000 !important;
+            font-weight: bold !important;
+            border: none !important;
+        }
+        /* Effet au survol */
+        div.stButton > button[kind="primary"]:hover {
+            background-color: #D98E1C !important;  /* Orange un peu plus foncé */
+            color: #000000 !important;
+            border: none !important;
+        }
+        /* Si jamais le bouton n'a pas le type primary, on le met aussi en orange */
+        div.stButton > button {
+            background-color: #F5A623 !important;
+            color: #000000 !important;
+            font-weight: bold !important;
+            border: none !important;
+        }
+        div.stButton > button:hover {
+            background-color: #D98E1C !important;
+            color: #000000 !important;
+        }
     </style>
     """,
     unsafe_allow_html=True
@@ -65,7 +91,8 @@ def check_password():
         return True
     st.title("🔐 Accès restreint")
     password_input = st.text_input("Entrez le mot de passe", type="password")
-    if st.button("Se connecter"):
+    # Bouton "Se connecter" en primary (plein) et gras
+    if st.button("Se connecter", type="primary"):
         if password_input == st.secrets["password"]:
             st.session_state.authenticated = True
             st.rerun()
@@ -153,8 +180,8 @@ with st.sidebar:
     st.metric("SL max", "2.5 %")
     st.metric("R/R min", "1:2")
     st.markdown("---")
-    # --- BOUTON DE DÉCONNEXION ---
-    if st.button("🚪 Se déconnecter", use_container_width=True):
+    # Bouton "Se déconnecter" en primary (plein) et gras
+    if st.button("🚪 Se déconnecter", use_container_width=True, type="primary"):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
