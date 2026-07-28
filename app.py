@@ -220,7 +220,7 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- TABLEAU DES SIGNAUX (sans index, sans bordures, score aligné à gauche) ---
+# --- TABLEAU DES SIGNAUX (EXACTEMENT LA PROPOSITION DE CHATGPT) ---
 st.markdown("### 📋 Latest setups")
 
 signals = fetch_signals()
@@ -240,15 +240,28 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         })
     df = pd.DataFrame(data)
 
-    # Application du style : alignement à gauche sur toutes les cellules, pas de bordures
-    styled_df = df.style.set_properties(**{
-        'text-align': 'left',
-        'padding': '8px'
-    }).set_table_styles([
-        {'selector': 'thead tr th', 'props': [('text-align', 'left'), ('background-color', '#2a2a2a'), ('color', 'white'), ('font-weight', 'bold')]},
-        {'selector': 'tbody tr:nth-child(even)', 'props': [('background-color', '#1e1e1e')]},
-        {'selector': 'tbody tr:nth-child(odd)', 'props': [('background-color', '#262626')]}
-    ]).hide(axis='index')
+    styled_df = (
+        df.style
+        .set_properties(**{
+            'text-align': 'left',
+            'padding': '8px'
+        })
+        .set_properties(subset=['Score'], **{
+            'text-align': 'left'
+        })
+        .set_table_styles([
+            {'selector': 'table', 'props': [('border-collapse', 'collapse')]},
+            {'selector': 'th', 'props': [('border', 'none'),
+                                         ('text-align', 'left'),
+                                         ('background-color', '#2a2a2a'),
+                                         ('color', 'white'),
+                                         ('font-weight', 'bold')]},
+            {'selector': 'td', 'props': [('border', 'none')]},
+            {'selector': 'tbody tr:nth-child(even)', 'props': [('background-color', '#1e1e1e')]},
+            {'selector': 'tbody tr:nth-child(odd)', 'props': [('background-color', '#262626')]}
+        ])
+        .hide(axis='index')
+    )
 
     st.dataframe(styled_df, use_container_width=True, height=400)
 
