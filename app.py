@@ -113,9 +113,65 @@ with col1:
     st.image("assets/logo_northsentinel_core.png", width=120)
 with col2:
     st.markdown("<h1 style='color: #F5A623; margin-bottom: 0;'>NorthSentinel CORE</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #AAAAAA; margin-top: 0; font-size: 1.2rem;'>Cockpit de supervision — Signaux en temps réel</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #AAAAAA; margin-top: 0; font-size: 1.2rem;'>Cockpit d'observation du système en temps réel</p>", unsafe_allow_html=True)
 
 st.divider()
+
+st.divider()
+st.markdown("### 📡 Exécution en direct")
+
+# --- LECTURE DU STATUT DU RUN EN COURS ---
+RUN_STATUS_FILE = "run_status.json"
+
+if os.path.exists(RUN_STATUS_FILE):
+    with open(RUN_STATUS_FILE, "r") as f:
+        try:
+            run_status = json.load(f)
+        except:
+            run_status = None
+else:
+    run_status = None
+
+if run_status and run_status.get("run_active", False):
+    # Phase en cours
+    phase = "📈 Actions" if run_status.get("phase") == "stocks" else "📊 ETFs"
+    progress = run_status.get("progress", "0/0")
+    current_ticker = run_status.get("current_ticker", "")
+    last_action = run_status.get("last_action", "")
+    score = run_status.get("current_score", 0)
+    timestamp = run_status.get("timestamp", "")
+    
+    col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+    col1.metric("Phase", f"{phase} ({progress})")
+    col2.metric("Ticker en cours", current_ticker if current_ticker else "—")
+    col3.metric("Statut", last_action)
+    col4.metric("Score", f"{score}/9" if score > 0 else "—")
+    
+    # Barre de progression (si progress est sous forme "X/Y")
+    try:
+        prog_parts = progress.split('/')
+        if len(prog_parts) == 2:
+            current = int(prog_parts[0])
+            total = int(prog_parts[1])
+            st.progress(current / total if total > 0 else 0)
+    except:
+        pass
+    
+    st.caption(f"Dernière mise à jour : {timestamp}")
+    
+    # Auto‑refresh toutes les 2 secondes si le run est actif
+    if st.button("🔄 Rafraîchir maintenant"):
+        st.rerun()
+    # Refresh automatique via JavaScript (Streamlit le gère)
+    st.markdown(
+        """
+        <meta http-equiv="refresh" content="2">
+        """,
+        unsafe_allow_html=True
+    )
+else:
+    st.info("🔹 Aucun run en cours. Le prochain run est programmé aux horaires habituels (10h, 10h30, 14h55, 15h55).")
+    st.caption("Les mises à jour apparaîtront automatiquement dès le début d’un run.")
 
 # --- FONCTION DE STATUT (SIMPLIFIÉE : 2 ÉTATS) ---
 def get_system_status():
