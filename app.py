@@ -220,12 +220,15 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- TABLEAU DES SIGNAUX (METRIQUES SUPPRIMEES) ---
-signals = fetch_signals()
-
+# --- TABLEAU DES SIGNAUX ---
 st.markdown("### 📋 Latest setups")
 
+signals = fetch_signals()
+
 if signals and isinstance(signals, list) and len(signals) > 0:
+    # Inverser l'ordre : le plus récent en premier
+    signals = signals[::-1]
+    
     data = []
     for s in signals:
         data.append({
@@ -247,14 +250,14 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         {'selector': 'tbody tr:nth-child(odd)', 'props': [('background-color', '#262626')]},
         {'selector': 'td', 'props': [('padding', '8px'), ('border', '1px solid #444'), ('text-align', 'center')]},
         {'selector': 'th', 'props': [('padding', '8px'), ('border', '1px solid #444'), ('text-align', 'center')]}
-    ]).hide(axis='index')  # cache l'index (colonne numérotée)
+    ]).hide(axis='index')  # cache l'index
 
     st.dataframe(styled_df, use_container_width=True, height=400)
 
-    # --- Détail du dernier signal (conservé) ---
+    # --- Détail du dernier signal (le plus récent) ---
     st.markdown("---")
     st.markdown("### 🔍 Last signal details")
-    last = signals[0]
+    last = signals[0]  # maintenant le plus récent
     col1, col2, col3 = st.columns(3)
     with col1:
         st.metric("Ticker", last.get("ticker", "N/A"))
