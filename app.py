@@ -17,6 +17,56 @@ GITHUB_PATH = "core_signals_today.json"
 RUN_STATUS_URL = "https://raw.githubusercontent.com/LuckyHT438/northsentinel-data/main/run_status.json"
 LOG_FILE = "core.log"
 
+# --- FONCTIONS DE CALCUL (reproduites depuis le Core) ---
+def get_market_bias_adjustment(bias_text):
+    if "Risk-on" in bias_text:
+        return {"tp": 0.005, "sl": 0.005, "trail": 0.5}
+    elif "Risk-off" in bias_text:
+        return {"tp": -0.005, "sl": -0.005, "trail": -0.5}
+    else:
+        return {"tp": 0.0, "sl": 0.0, "trail": 0.0}
+
+def get_cap_adjustment(cap_category):
+    adjustments = {
+        "Mega Cap": {"tp": 0.0, "sl": 0.0, "trail": 0.0},
+        "Large Cap": {"tp": 0.0, "sl": 0.0, "trail": 0.0},
+        "Mid Cap": {"tp": -0.002, "sl": 0.002, "trail": 0.005},
+        "Small Cap": {"tp": -0.005, "sl": 0.005, "trail": 0.010},
+        "Micro Cap": {"tp": -0.010, "sl": 0.010, "trail": 0.015},
+        "N/A": {"tp": 0.0, "sl": 0.0, "trail": 0.0}
+    }
+    return adjustments.get(cap_category, {"tp": 0.0, "sl": 0.0, "trail": 0.0})
+
+def get_tp_multiplier(score, gap, cap_category="Large Cap", market_bias=None, spread_pct=0.0):
+    if score < 6:
+        if score == 5:
+            base = 1.010
+        else:
+            base = 1.005
+    elif gap >= 20:
+        base = 1.02 + (score - 4) * 0.006
+    elif gap >= 10:
+        base = 1.015 + (score - 4) * 0.004
+    else:
+        base = 1.005 + (score - 4) * 0.002
+    cap_adj = get_cap_adjustment(cap_category)
+    bias_adj = get_market_bias_adjustment(market_bias) if market_bias else {"tp": 0.0}
+    spread_adj = spread_pct / 100.0
+    base = base + cap_adj["tp"] + bias_adj["tp"] - spread_adj
+    return round(base, 3)
+
+def get_sl_multiplier(score, cap_category="Large Cap", market_bias=None, spread_pct=0.0):
+    if score >= 8:
+        base = 0.97
+    elif score >= 6:
+        base = 0.96
+    else:
+        base = 0.95
+    cap_adj = get_cap_adjustment(cap_category)
+    bias_adj = get_market_bias_adjustment(market_bias) if market_bias else {"sl": 0.0}
+    spread_adj = spread_pct / 200.0
+    return round(base - cap_adj["sl"] - bias_adj["sl"] - spread_adj, 3)
+
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="NorthSentinel CORE",
@@ -25,7 +75,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- CSS ---
+# --- CSS (suppression des bordures) ---
 st.markdown(
     """
     <style>
@@ -56,7 +106,7 @@ st.markdown(
         }
         .sidebar-signout button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
 
-        /* --- SUPPRESSION DES BORDURES DES DATAFRAMES --- */
+        /* Supprimer les bordures des dataframes */
         .stDataFrame {
             border: none !important;
         }
@@ -231,70 +281,77 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- LATEST SETUPS (TABLEAU SANS BORDURES) ---
+# --- LATEST SETUPS (TABLEAU COMPLET) ---
 st.markdown("### 📋 Latest setups")
 
 signals = fetch_signals()
 
 if signals and isinstance(signals, list) and len(signals) > 0:
-    # Préparer les données
-    data = []
+    data_latest = []
     for s in signals:
-        data.append({
-            "Ticker": s.get("ticker", "N/A"),
-            "Score": s.get("score", 0),
-            "Gap": f"{s.get('gap', 0):.1f}%",
-            "Vol Ratio": f"{s.get('vol_ratio', 0):.1f}x",
-            "Market Bias": s.get("market_bias", "N/A"),
-            "Run Time": s.get("timestamp", "N/A")
-        })
-    df_latest = pd.DataFrame(data)
+        entry = s.get('entry_price', 0)
+        spread_pct = s.get('spread_pct', 0)
+        spread_usd = round((spread_pct / 100) * entry, 2) if entry > 0 else 0
+        cap_cat = s.get('cap_category', 'N/A')
+        market_bias = s.get('market_bias', '')
+        score = s.get('score', 0)
+        gap = s.get('gap', 0)
+        # Calculer TP et SL
+        tp_mult = get_tp_multiplier(score, gap, cap_cat, market_bias, spread_pct)
+        sl_mult = get_sl_multiplier(score, cap_cat, market_bias, spread_pct)
+        tp_price = round(entry * tp_mult, 2)
+        sl_price = round(entry * sl_mult, 2)
+        trail_pct = s.get('trail_percent', 0)
+        trail_price = round(entry * (1 - trail_pct/100), 2) if trail_pct > 0 else 0
 
-    # Afficher le tableau sans bordures avec Score aligné à gauche
+        data_latest.append({
+            "Ticker": s.get('ticker', 'N/A'),
+            "Cap. cat.": cap_cat,
+            "Spread": f"{spread_pct:.2f}% (${spread_usd:.2f})",
+            "Entry": f"${entry:.2f}",
+            "TP": f"${tp_price:.2f}",
+            "SL": f"${sl_price:.2f}",
+            "Trailing Stop": f"${trail_price:.2f} ({trail_pct:.2f}%)"
+        })
+
+    df_latest = pd.DataFrame(data_latest)
     st.dataframe(
         df_latest,
         use_container_width=True,
         hide_index=True,
         column_config={
             "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-            "Score": st.column_config.NumberColumn("Score", width="small", alignment="left"),
-            "Gap": st.column_config.TextColumn("Gap", width="small"),
-            "Vol Ratio": st.column_config.TextColumn("Vol Ratio", width="small"),
-            "Market Bias": st.column_config.TextColumn("Market Bias", width="medium"),
-            "Run Time": st.column_config.TextColumn("Run Time", width="medium")
+            "Cap. cat.": st.column_config.TextColumn("Cap. cat.", width="small"),
+            "Spread": st.column_config.TextColumn("Spread", width="small"),
+            "Entry": st.column_config.TextColumn("Entry", width="small"),
+            "TP": st.column_config.TextColumn("TP", width="small"),
+            "SL": st.column_config.TextColumn("SL", width="small"),
+            "Trailing Stop": st.column_config.TextColumn("Trailing Stop", width="medium")
         }
     )
 
-    # --- LAST SIGNAL DETAILS (TABLEAU HARMONISÉ) ---
+    # --- LAST SIGNAL DETAILS (tableau avec les autres métriques) ---
     st.markdown("---")
     st.markdown("### 🔍 Last signal details")
     last = signals[-1]
-    # Créer un petit tableau avec une seule ligne pour les détails
     detail_data = [{
-        "Ticker": last.get("ticker", "N/A"),
-        "Type": last.get("type", "STOCK"),
-        "Entry": f"${last.get('entry_price', 0):.2f}",
-        "Score": last.get("score", 0),
+        "Score": last.get('score', 0),
         "Gap": f"{last.get('gap', 0):.1f}%",
-        "Trailing Stop": f"{last.get('trail_percent', 0):.2f}%",
-        "Cap": last.get("cap_category", "N/A"),
-        "Market Bias": last.get("market_bias", "N/A")
+        "Vol. ratio": f"{last.get('vol_ratio', 0):.1f}x",
+        "Market bias": last.get('market_bias', 'N/A'),
+        "Run time": last.get('timestamp', 'N/A')
     }]
     df_detail = pd.DataFrame(detail_data)
-
     st.dataframe(
         df_detail,
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-            "Type": st.column_config.TextColumn("Type", width="small"),
-            "Entry": st.column_config.TextColumn("Entry", width="small"),
             "Score": st.column_config.NumberColumn("Score", width="small", alignment="left"),
             "Gap": st.column_config.TextColumn("Gap", width="small"),
-            "Trailing Stop": st.column_config.TextColumn("Trailing Stop", width="small"),
-            "Cap": st.column_config.TextColumn("Cap", width="small"),
-            "Market Bias": st.column_config.TextColumn("Market Bias", width="medium")
+            "Vol. ratio": st.column_config.TextColumn("Vol. ratio", width="small"),
+            "Market bias": st.column_config.TextColumn("Market bias", width="medium"),
+            "Run time": st.column_config.TextColumn("Run time", width="medium")
         }
     )
 
