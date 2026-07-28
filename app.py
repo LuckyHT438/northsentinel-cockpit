@@ -240,31 +240,54 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         })
     df = pd.DataFrame(data)
 
+    # 1. Dynamique: déjà géré par fetch_signals + st_autorefresh
+    # 2. Pas de colonne index: .hide(axis='index')
+    # 3. Pas de bordures: border: none
+    # 4. Score aligné à gauche: subset=['Score']
     styled_df = (
         df.style
-       .set_properties(**{
-            'text-align': 'left',
-            'padding': '8px'
-        })
-       .set_properties(subset=['Score'], **{
-            'text-align': 'left'
-        })
-       .set_table_styles([
+        .set_properties(**{'text-align': 'left', 'padding': '8px'})
+        .set_properties(subset=['Score'], **{'text-align': 'left'})
+        .set_table_styles([
             {'selector': 'table', 'props': [('border-collapse', 'collapse')]},
-            {'selector': 'th', 'props': [('border', 'none'),
-                                         ('text-align', 'left'),
-                                         ('background-color', '#2a2a2a'),
-                                         ('color', 'white'),
-                                         ('font-weight', 'bold')]},
+            {'selector': 'th', 'props': [
+                ('border', 'none'),
+                ('text-align', 'left'),
+                ('background-color', '#2a2a2a'),
+                ('color', 'white'),
+                ('font-weight', 'bold')
+            ]},
             {'selector': 'td', 'props': [('border', 'none')]},
             {'selector': 'tbody tr:nth-child(even)', 'props': [('background-color', '#1e1e1e')]},
             {'selector': 'tbody tr:nth-child(odd)', 'props': [('background-color', '#262626')]}
         ])
-       .hide(axis='index')
+        .hide(axis='index')
     )
 
     st.dataframe(styled_df, use_container_width=True, height=400)
 
+    # --- DÉTAIL DU DERNIER SIGNAL ---
+    st.markdown("---")
+    st.markdown("### 🔍 Last signal details")
+    last = signals[-1]
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Ticker", last.get("ticker", "N/A"))
+        st.metric("Type", last.get("type", "STOCK"))
+    with col2:
+        st.metric("Entry Price", f"${last.get('entry_price', 0):.2f}")
+        st.metric("Score", f"{last.get('score', 0)}/9" if last.get("type")=="STOCK" else f"{last.get('score', 0)}/5")
+    with col3:
+        st.metric("GAP", f"{last.get('gap', 0):.1f}%")
+        st.metric("Trailing Stop", f"{last.get('trail_percent', 0):.2f}%")
+    if last.get("cap_category"):
+        st.caption(f"Capitalization: {last.get('cap_category')}")
+    if last.get("market_bias"):
+        st.caption(f"Market bias: {last.get('market_bias')}")
+else:
+    st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
+    st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
+    
     # --- DÉTAIL DU DERNIER SIGNAL (RESTAURÉ) ---
     st.markdown("---")
     st.markdown("### 🔍 Last signal details")
