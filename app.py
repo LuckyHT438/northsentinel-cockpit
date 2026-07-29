@@ -303,18 +303,10 @@ def get_system_status():
     return "🔵", f"Next run in {hours}h {minutes:02d}min"
 
 # --- SIDEBAR ---
-# --- SIDEBAR ---
 with st.sidebar:
     status_emoji, status_msg = get_system_status()
-    st.markdown(
-        f"""
-        <div style="margin-bottom: 0.1rem;">
-            <h3 style="margin-bottom: 0.1rem;">{status_emoji} Status</h3>
-            <p style="margin-top: 0; font-style: italic;">{status_msg}</p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    st.markdown(f"### {status_emoji} Status")
+    st.markdown(f"*{status_msg}*")
     st.markdown("---")
     st.markdown("<h3 style='color: #F5A623;'>⚙️ Risk Parameters</h3>", unsafe_allow_html=True)
     st.metric("Capital", "1 000 000 $")
@@ -330,7 +322,7 @@ with st.sidebar:
         st.rerun()
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
-    
+
 # ============================================================================
 # TODAY VALIDATED SETUPS (tableau complet avec colonnes spécifiques)
 # ============================================================================
