@@ -314,8 +314,8 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- LATEST SETUPS (TABLEAU COMPLET) ---
-st.markdown("### 📋 Latest setups")
+# --- LATEST VALIDATED SETUPS (TABLEAU COMPLET) ---
+st.markdown("### 📋 Latest validated setups")
 
 signals = fetch_signals()
 
@@ -368,7 +368,7 @@ else:
 
 # --- LAST SIGNAL DETAILS (toujours affiché, même sans signaux) ---
 st.markdown("---")
-st.markdown("### 🔍 Last signal details")
+st.markdown("### 🔍 Last signals details")
 
 if signals and isinstance(signals, list) and len(signals) > 0:
     last = signals[-1]
