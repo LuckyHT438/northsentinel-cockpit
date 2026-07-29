@@ -66,7 +66,6 @@ def get_sl_multiplier(score, cap_category="Large Cap", market_bias=None, spread_
     spread_adj = spread_pct / 200.0
     return round(base - cap_adj["sl"] - bias_adj["sl"] - spread_adj, 3)
 
-# --- AJOUT DE LA FONCTION apply_risk_mandate (pour cohérence avec le Core) ---
 def apply_risk_mandate(tp_mult, sl_mult, trail_pct, min_ratio=2.0, max_tp=5.0, max_sl=2.5, min_sl=0.5):
     tp_pct = round((tp_mult - 1) * 100, 2)
     sl_pct = round((1 - sl_mult) * 100, 2)
@@ -79,7 +78,7 @@ def apply_risk_mandate(tp_mult, sl_mult, trail_pct, min_ratio=2.0, max_tp=5.0, m
         sl_pct = round(required_sl, 2)
 
     if sl_pct < min_sl:
-        sl_pct = min_sl  # On ne rejette pas le signal dans le cockpit
+        sl_pct = min_sl
 
     final_tp_mult = round(1 + tp_pct / 100, 3)
     final_sl_mult = round(1 - sl_pct / 100, 3)
@@ -102,7 +101,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- CSS (inchangé) ---
 st.markdown(
     """
     <style>
@@ -337,7 +335,7 @@ with st.sidebar:
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ============================================================================
-# TODAY VALIDATED SETUPS (avec application de apply_risk_mandate)
+# TODAY VALIDATED SETUPS
 # ============================================================================
 st.markdown("### 📋 Today validated setups")
 
@@ -354,12 +352,10 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         market_bias = s.get('market_bias', '')
         cap_cat = s.get('cap_category', 'Large Cap')
 
-        # Calculs bruts
         tp_mult_brut = get_tp_multiplier(score, gap, cap_cat, market_bias, spread_pct)
         sl_mult_brut = get_sl_multiplier(score, cap_cat, market_bias, spread_pct)
         trail_pct_brut = s.get('trail_percent', 0)
 
-        # Application du mandat de risque (comme dans le Core)
         tp_mult, sl_mult, trail_pct = apply_risk_mandate(tp_mult_brut, sl_mult_brut, trail_pct_brut)
 
         tp_price = round(entry * tp_mult, 2)
@@ -396,34 +392,35 @@ else:
     st.caption("💡 The interface refreshes automatically every 30 seconds.")
 
 # ============================================================================
-# TODAY RELATED SIGNALS DETAILS (inchangé)
+# TODAY RELATED SIGNALS DETAILS (CORRIGÉ : boucle sur tous les signaux)
 # ============================================================================
 st.markdown("---")
 st.markdown("### 🔍 Today related signals details")
 
 if signals and isinstance(signals, list) and len(signals) > 0:
-    last = signals[-1]
-
-    asset_type_last = last.get('type', 'STOCK')
-    if asset_type_last == 'ETF':
-        aum_m = last.get('aum_m', 0)
-        if aum_m >= 1000:
-            cap_aum_last = f"{aum_m/1000:.1f}B$"
-        elif aum_m > 0:
-            cap_aum_last = f"{aum_m:.1f}M$"
+    detail_data = []
+    for s in signals:
+        asset_type = s.get('type', 'STOCK')
+        if asset_type == 'ETF':
+            aum_m = s.get('aum_m', 0)
+            if aum_m >= 1000:
+                cap_aum = f"{aum_m/1000:.1f}B$"
+            elif aum_m > 0:
+                cap_aum = f"{aum_m:.1f}M$"
+            else:
+                cap_aum = "N/A"
         else:
-            cap_aum_last = "N/A"
-    else:
-        cap_aum_last = last.get('cap_category', 'N/A')
+            cap_aum = s.get('cap_category', 'N/A')
 
-    detail_data = [{
-        "Score": last.get('score', 0),
-        "Cap./AUM": cap_aum_last,
-        "Gap": f"{last.get('gap', 0):.1f}%",
-        "Vol. ratio": f"{last.get('vol_ratio', 0):.1f}x",
-        "Market bias": last.get('market_bias', 'N/A'),
-        "Run time": last.get('timestamp', 'N/A')
-    }]
+        detail_data.append({
+            "Score": s.get('score', 0),
+            "Cap./AUM": cap_aum,
+            "Gap": f"{s.get('gap', 0):.1f}%",
+            "Vol. ratio": f"{s.get('vol_ratio', 0):.1f}x",
+            "Market bias": s.get('market_bias', 'N/A'),
+            "Run time": s.get('timestamp', 'N/A')
+        })
+
     df_detail = pd.DataFrame(detail_data)
     st.dataframe(
         df_detail,
