@@ -284,7 +284,7 @@ if run_active:
     st.caption(f"Last update: {timestamp}")
     st.caption("🔄 Auto‑refresh: 3s")
 else:
-    st.info("🔹 No run in progress. Auto‑refresh toutes les 30s pour détecter les nouveaux signaux.")
+    st.info("🔹 No run in progress. Auto-refreshes every 30s to detect new signals.")
     st.caption("🔄 Auto‑refresh: 30s")
 
 # --- SYSTEM STATUS (pour la sidebar) ---
