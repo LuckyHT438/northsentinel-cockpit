@@ -305,16 +305,8 @@ def get_system_status():
 # --- SIDEBAR ---
 with st.sidebar:
     status_emoji, status_msg = get_system_status()
-    # --- Réduction de l'espace entre Status et le message dynamique ---
-    st.markdown(
-        f"""
-        <div style="margin-bottom: 0.1rem;">
-            <h3 style="margin-bottom: 0.1rem;">{status_emoji} Status</h3>
-            <p style="margin-top: 0; font-style: italic; font-size: 0.9rem;">{status_msg}</p>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+    st.markdown(f"### {status_emoji} Status")
+    st.markdown(f"*{status_msg}*")
     st.markdown("---")
     st.markdown("<h3 style='color: #F5A623;'>⚙️ Risk Parameters</h3>", unsafe_allow_html=True)
     st.metric("Capital", "1 000 000 $")
