@@ -99,8 +99,8 @@ st.markdown(
             color: #0E1117 !important;
             border: none !important;
             border-radius: 4px !important;
-            padding: 0.3rem 0.6rem !important;
-            font-size: 0.7rem !important;
+            padding: 0.5rem 1rem !important;
+            font-size: 0.9rem !important;
             width: auto !important;
         }
         .sidebar-signout button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
