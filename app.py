@@ -168,7 +168,7 @@ with col2:
 st.divider()
 
 # --- FONCTIONS DE LECTURE (avec API GitHub) ---
-@st.cache_data(ttl=10)
+@st.cache_data(ttl=5)
 def fetch_signals():
     token = st.secrets.get("GITHUB_TOKEN", "")
     if not token:
@@ -186,6 +186,8 @@ def fetch_signals():
     except:
         return []
 
+# 🔧 RÉDUCTION DU CACHE : de 10s à 1s pour une détection plus rapide du début de run
+@st.cache_data(ttl=1)
 def fetch_run_status():
     token = st.secrets.get("GITHUB_TOKEN", "")
     if not token:
