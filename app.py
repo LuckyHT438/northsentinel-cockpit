@@ -66,6 +66,34 @@ def get_sl_multiplier(score, cap_category="Large Cap", market_bias=None, spread_
     spread_adj = spread_pct / 200.0
     return round(base - cap_adj["sl"] - bias_adj["sl"] - spread_adj, 3)
 
+# --- AJOUT DE LA FONCTION apply_risk_mandate (pour cohérence avec le Core) ---
+def apply_risk_mandate(tp_mult, sl_mult, trail_pct, min_ratio=2.0, max_tp=5.0, max_sl=2.5, min_sl=0.5):
+    tp_pct = round((tp_mult - 1) * 100, 2)
+    sl_pct = round((1 - sl_mult) * 100, 2)
+
+    tp_pct = min(tp_pct, max_tp)
+    sl_pct = min(sl_pct, max_sl)
+
+    required_sl = tp_pct / min_ratio
+    if required_sl < sl_pct:
+        sl_pct = round(required_sl, 2)
+
+    if sl_pct < min_sl:
+        sl_pct = min_sl  # On ne rejette pas le signal dans le cockpit
+
+    final_tp_mult = round(1 + tp_pct / 100, 3)
+    final_sl_mult = round(1 - sl_pct / 100, 3)
+
+    max_allowed_trail = sl_pct * 0.8
+    if trail_pct > max_allowed_trail:
+        trail_pct = round(max_allowed_trail, 2)
+    if trail_pct < 0.3:
+        trail_pct = 0.3
+    if trail_pct > 5.0:
+        trail_pct = 5.0
+
+    return final_tp_mult, final_sl_mult, trail_pct
+
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="NorthSentinel CORE",
@@ -74,7 +102,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- CSS (suppression des bordures, espacements réduits) ---
+# --- CSS (inchangé) ---
 st.markdown(
     """
     <style>
@@ -105,7 +133,6 @@ st.markdown(
         }
         .sidebar-signout button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
 
-        /* Supprimer les bordures des dataframes */
         .stDataFrame {
             border: none !important;
         }
@@ -116,7 +143,6 @@ st.markdown(
             font-weight: bold !important;
         }
 
-        /* Réduire les marges entre les sections */
         .block-container {
             padding-top: 3rem !important;
             padding-bottom: 0.5rem !important;
@@ -265,13 +291,10 @@ else:
 
 # --- SYSTEM STATUS (pour la sidebar) ---
 def get_system_status():
-    # Vérifier d'abord si un run est actif
     run_status = fetch_run_status()
     if run_status and run_status.get("run_active", False):
-        # Pas de redondance avec la section Live Execution : on reste minimaliste
         return "🟢", "Run in progress"
 
-    # Sinon, calculer le prochain run
     now = datetime.now(MONTREAL_TZ)
     run_times = [
         now.replace(hour=10, minute=0, second=0, microsecond=0),
@@ -314,7 +337,7 @@ with st.sidebar:
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ============================================================================
-# TODAY VALIDATED SETUPS
+# TODAY VALIDATED SETUPS (avec application de apply_risk_mandate)
 # ============================================================================
 st.markdown("### 📋 Today validated setups")
 
@@ -330,11 +353,17 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         gap = s.get('gap', 0)
         market_bias = s.get('market_bias', '')
         cap_cat = s.get('cap_category', 'Large Cap')
-        tp_mult = get_tp_multiplier(score, gap, cap_cat, market_bias, spread_pct)
-        sl_mult = get_sl_multiplier(score, cap_cat, market_bias, spread_pct)
+
+        # Calculs bruts
+        tp_mult_brut = get_tp_multiplier(score, gap, cap_cat, market_bias, spread_pct)
+        sl_mult_brut = get_sl_multiplier(score, cap_cat, market_bias, spread_pct)
+        trail_pct_brut = s.get('trail_percent', 0)
+
+        # Application du mandat de risque (comme dans le Core)
+        tp_mult, sl_mult, trail_pct = apply_risk_mandate(tp_mult_brut, sl_mult_brut, trail_pct_brut)
+
         tp_price = round(entry * tp_mult, 2)
         sl_price = round(entry * sl_mult, 2)
-        trail_pct = s.get('trail_percent', 0)
         trail_price = round(entry * (1 - trail_pct/100), 2) if trail_pct > 0 else 0
 
         data_latest.append({
@@ -367,7 +396,7 @@ else:
     st.caption("💡 The interface refreshes automatically every 30 seconds.")
 
 # ============================================================================
-# TODAY RELATED SIGNALS DETAILS
+# TODAY RELATED SIGNALS DETAILS (inchangé)
 # ============================================================================
 st.markdown("---")
 st.markdown("### 🔍 Today related signals details")
