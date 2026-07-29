@@ -164,7 +164,7 @@ with col1:
 with col2:
     st.markdown(
         """
-        <div style="margin-top: -3px;">
+        <div style="margin-top: -12px;">
             <h1 style='color: #F5A623; margin-bottom: 0;'>NorthSentinel CORE</h1>
             <p style='color: #AAAAAA; margin-top: 0; font-size: 1.2rem;'>Real‑time system monitoring cockpit — Beta</p>
         </div>
