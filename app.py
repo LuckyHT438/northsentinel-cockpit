@@ -193,7 +193,6 @@ def fetch_signals():
     except:
         return []
 
-# 🔧 RÉDUCTION DU CACHE : de 10s à 1s pour une détection plus rapide du début de run
 @st.cache_data(ttl=1)
 def fetch_run_status():
     token = st.secrets.get("GITHUB_TOKEN", "")
@@ -220,7 +219,7 @@ if run_active:
 else:
     st_autorefresh(interval=30000, key="idle_refresh")
 
-# --- LIVE EXECUTION (corrigé pour gérer "initialisation") ---
+# --- LIVE EXECUTION ---
 st.markdown("### 📡 Live Execution")
 
 if run_active:
@@ -231,7 +230,6 @@ if run_active:
     score = run_status.get("current_score", 0)
     timestamp = run_status.get("timestamp", "")
 
-    # Déterminer le libellé de la phase
     if phase == "initialisation":
         phase_label = "🔄 Initialisation"
     elif phase == "stocks":
@@ -247,7 +245,6 @@ if run_active:
     col3.metric("Status", last_action)
     col4.metric("Score", f"{score}/9" if score > 0 else "—")
 
-    # Barre de progression (gère le cas total=0)
     try:
         prog_parts = progress.split('/')
         if len(prog_parts) == 2:
@@ -256,7 +253,7 @@ if run_active:
             if total > 0:
                 st.progress(current / total)
             else:
-                st.progress(0.0)  # total=0, progression à 0%
+                st.progress(0.0)
     except:
         pass
 
@@ -268,6 +265,13 @@ else:
 
 # --- SYSTEM STATUS (pour la sidebar) ---
 def get_system_status():
+    # Vérifier d'abord si un run est actif
+    run_status = fetch_run_status()
+    if run_status and run_status.get("run_active", False):
+        # Pas de redondance avec la section Live Execution : on reste minimaliste
+        return "🟢", "Run in progress"
+
+    # Sinon, calculer le prochain run
     now = datetime.now(MONTREAL_TZ)
     run_times = [
         now.replace(hour=10, minute=0, second=0, microsecond=0),
@@ -282,20 +286,6 @@ def get_system_status():
             break
     if next_run is None:
         next_run = run_times[0] + timedelta(days=1)
-
-    signals = fetch_signals()
-    last_signal_time = None
-    if signals and isinstance(signals, list) and len(signals) > 0:
-        last_ts = signals[-1].get('timestamp')
-        if last_ts:
-            try:
-                last_signal_time = datetime.strptime(last_ts, '%Y-%m-%d %H:%M')
-                last_signal_time = MONTREAL_TZ.localize(last_signal_time)
-            except:
-                pass
-
-    if last_signal_time and (now - last_signal_time).total_seconds() / 60 < 3:
-        return "🟢", "Run in progress (latest signal recent)"
 
     delta_next = next_run - now
     hours = delta_next.seconds // 3600
@@ -324,7 +314,7 @@ with st.sidebar:
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ============================================================================
-# TODAY VALIDATED SETUPS (tableau complet avec colonnes spécifiques)
+# TODAY VALIDATED SETUPS
 # ============================================================================
 st.markdown("### 📋 Today validated setups")
 
@@ -372,13 +362,12 @@ if signals and isinstance(signals, list) and len(signals) > 0:
             "Trailing Stop": st.column_config.TextColumn("Trailing Stop", width="medium")
         }
     )
-
 else:
     st.info("No signals found in the data repository. Signals will appear after the first scheduled run.")
     st.caption("💡 The interface refreshes automatically every 30 seconds.")
 
 # ============================================================================
-# TODAY RELATED SIGNALS DETAILS (avec Cap./AUM dynamique)
+# TODAY RELATED SIGNALS DETAILS
 # ============================================================================
 st.markdown("---")
 st.markdown("### 🔍 Today related signals details")
@@ -386,7 +375,6 @@ st.markdown("### 🔍 Today related signals details")
 if signals and isinstance(signals, list) and len(signals) > 0:
     last = signals[-1]
 
-    # --- Déterminer la valeur Cap./AUM pour le dernier signal ---
     asset_type_last = last.get('type', 'STOCK')
     if asset_type_last == 'ETF':
         aum_m = last.get('aum_m', 0)
