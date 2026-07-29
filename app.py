@@ -99,7 +99,7 @@ st.markdown(
             color: #0E1117 !important;
             border: none !important;
             border-radius: 4px !important;
-            padding: 0.5rem 1rem !important;
+            padding: 0.2rem 0.6rem !important;
             font-size: 0.9rem !important;
             width: fit-content !important;
         }
