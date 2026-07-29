@@ -314,8 +314,8 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- LATEST VALIDATED SETUPS (TABLEAU COMPLET) ---
-st.markdown("### 📋 Latest validated setups")
+# --- TODAY VALIDATED SETUPS (TABLEAU COMPLET) ---
+st.markdown("### 📋 Today validated setups")
 
 signals = fetch_signals()
 
@@ -366,9 +366,9 @@ else:
     st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
     st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
 
-# --- LAST SIGNAL DETAILS (toujours affiché, même sans signaux) ---
+# --- TODAY SIGNAL DETAILS (toujours affiché, même sans signaux) ---
 st.markdown("---")
-st.markdown("### 🔍 Last signals details")
+st.markdown("### 🔍 Today signals details")
 
 if signals and isinstance(signals, list) and len(signals) > 0:
     last = signals[-1]
