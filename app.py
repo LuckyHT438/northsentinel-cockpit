@@ -1,3 +1,11 @@
+Voici le script complet `app.py` à jour. Il inclut :
+
+- La correction pour afficher **tous les signaux** dans le tableau *"Today related signals details"* (au lieu du seul dernier).
+- La récupération de la colonne `Exchange` via `s.get('exchange', 'N/A')` – elle s’affichera correctement dès que le script Core sera modifié pour inclure ce champ (modification que je t’ai indiquée séparément).
+
+Le reste est inchangé.
+
+```python
 import streamlit as st
 import json
 import os
@@ -443,3 +451,4 @@ st.markdown(
     "<p style='text-align: center; color: #666; font-size: 0.8rem; margin-top: 1rem;'>NorthSentinel CORE – Cockpit v2.0 – July, 2026 © NorthSentinel Trading</p>",
     unsafe_allow_html=True
 )
+```
