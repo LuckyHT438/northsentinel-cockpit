@@ -314,7 +314,9 @@ with st.sidebar:
     st.markdown('</div>', unsafe_allow_html=True)
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
-# --- TODAY VALIDATED SETUPS (TABLEAU COMPLET) ---
+# ============================================================================
+# TODAY VALIDATED SETUPS (tableau complet avec colonnes spécifiques)
+# ============================================================================
 st.markdown("### 📋 Today validated setups")
 
 signals = fetch_signals()
@@ -325,10 +327,10 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         entry = s.get('entry_price', 0)
         spread_pct = s.get('spread_pct', 0)
         spread_usd = round((spread_pct / 100) * entry, 2) if entry > 0 else 0
-        cap_cat = s.get('cap_category', 'N/A')
-        market_bias = s.get('market_bias', '')
         score = s.get('score', 0)
         gap = s.get('gap', 0)
+        market_bias = s.get('market_bias', '')
+        cap_cat = s.get('cap_category', 'Large Cap')
         tp_mult = get_tp_multiplier(score, gap, cap_cat, market_bias, spread_pct)
         sl_mult = get_sl_multiplier(score, cap_cat, market_bias, spread_pct)
         tp_price = round(entry * tp_mult, 2)
@@ -338,7 +340,7 @@ if signals and isinstance(signals, list) and len(signals) > 0:
 
         data_latest.append({
             "Ticker": s.get('ticker', 'N/A'),
-            "Cap. cat.": cap_cat,
+            "Exchange": s.get('exchange', 'N/A'),
             "Spread": f"{spread_pct:.2f}% (${spread_usd:.2f})",
             "Entry": f"${entry:.2f}",
             "TP": f"${tp_price:.2f}",
@@ -353,7 +355,7 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         hide_index=True,
         column_config={
             "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-            "Cap. cat.": st.column_config.TextColumn("Cap. cat.", width="small"),
+            "Exchange": st.column_config.TextColumn("Exchange", width="small"),
             "Spread": st.column_config.TextColumn("Spread", width="small"),
             "Entry": st.column_config.TextColumn("Entry", width="small"),
             "TP": st.column_config.TextColumn("TP", width="small"),
@@ -366,14 +368,31 @@ else:
     st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
     st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
 
-# --- TODAY RELATED SIGNALS DETAILS (toujours affiché, même sans signaux) ---
+# ============================================================================
+# TODAY RELATED SIGNALS DETAILS (avec Cap./AUM dynamique)
+# ============================================================================
 st.markdown("---")
 st.markdown("### 🔍 Today related signals details")
 
 if signals and isinstance(signals, list) and len(signals) > 0:
     last = signals[-1]
+
+    # --- Déterminer la valeur Cap./AUM pour le dernier signal ---
+    asset_type_last = last.get('type', 'STOCK')
+    if asset_type_last == 'ETF':
+        aum_m = last.get('aum_m', 0)
+        if aum_m >= 1000:
+            cap_aum_last = f"{aum_m/1000:.1f}B$"
+        elif aum_m > 0:
+            cap_aum_last = f"{aum_m:.1f}M$"
+        else:
+            cap_aum_last = "N/A"
+    else:
+        cap_aum_last = last.get('cap_category', 'N/A')
+
     detail_data = [{
         "Score": last.get('score', 0),
+        "Cap./AUM": cap_aum_last,
         "Gap": f"{last.get('gap', 0):.1f}%",
         "Vol. ratio": f"{last.get('vol_ratio', 0):.1f}x",
         "Market bias": last.get('market_bias', 'N/A'),
@@ -386,6 +405,7 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         hide_index=True,
         column_config={
             "Score": st.column_config.NumberColumn("Score", width="small", alignment="left"),
+            "Cap./AUM": st.column_config.TextColumn("Cap./AUM", width="small"),
             "Gap": st.column_config.TextColumn("Gap", width="small"),
             "Vol. ratio": st.column_config.TextColumn("Vol. ratio", width="small"),
             "Market bias": st.column_config.TextColumn("Market bias", width="medium"),
@@ -395,7 +415,7 @@ if signals and isinstance(signals, list) and len(signals) > 0:
 else:
     st.info("📭 Aucun détail de signal disponible pour le moment.")
 
-# --- FOOTER (avec un espace réduit) ---
+# --- FOOTER ---
 st.markdown(
     "<p style='text-align: center; color: #666; font-size: 0.8rem; margin-top: 1rem;'>NorthSentinel CORE – Cockpit v2.0 – July, 2026 © NorthSentinel Trading</p>",
     unsafe_allow_html=True
