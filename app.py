@@ -366,9 +366,9 @@ else:
     st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
     st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
 
-# --- TODAY SIGNAL DETAILS (toujours affiché, même sans signaux) ---
+# --- TODAY RELATED SIGNALS DETAILS (toujours affiché, même sans signaux) ---
 st.markdown("---")
-st.markdown("### 🔍 Today signals details")
+st.markdown("### 🔍 Today related signals details")
 
 if signals and isinstance(signals, list) and len(signals) > 0:
     last = signals[-1]
