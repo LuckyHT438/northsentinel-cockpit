@@ -374,8 +374,8 @@ if signals and isinstance(signals, list) and len(signals) > 0:
     )
 
 else:
-    st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
-    st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
+    st.info("No signals found in the data repository. Signals will appear after the first scheduled run.")
+    st.caption("💡 The interface refreshes automatically every 30 seconds.")
 
 # ============================================================================
 # TODAY RELATED SIGNALS DETAILS (avec Cap./AUM dynamique)
@@ -422,7 +422,7 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         }
     )
 else:
-    st.info("📭 Aucun détail de signal disponible pour le moment.")
+    st.info("📭 No signal details available at the moment.")
 
 # --- FOOTER ---
 st.markdown(
