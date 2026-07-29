@@ -155,7 +155,7 @@ if not check_password():
     st.stop()
 
 # --- HEADER ---
-col1, col2 = st.columns([1, 3], vertical_alignment="center")
+col1, col2 = st.columns([1, 5], vertical_alignment="center")
 with col1:
     try:
         st.image("assets/logo_northsentinel_core.png", width=120)
