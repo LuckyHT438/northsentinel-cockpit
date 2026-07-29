@@ -93,15 +93,13 @@ st.markdown(
             font-size: 1rem !important;
         }
         .stButton button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
-        .sidebar-signout button {
-            font-weight: bold !important;
-            background-color: #F5A623 !important;
-            color: #0E1117 !important;
-            border: none !important;
-            border-radius: 4px !important;
-            padding: 0.2rem 0.6rem !important;
-            font-size: 0.9rem !important;
-            width: fit-content !important;
+        div.sidebar-signout > button {
+            padding: 0.15rem 0.5rem !important;
+            font-size: 0.75rem !important;
+            line-height: 1.2 !important;
+            min-height: 0 !important;       /* Annule les hauteurs minimales imposées */
+            height: auto !important;
+            width: auto !important;font-weight: bold !important;
         }
         .sidebar-signout button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
 
