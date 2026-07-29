@@ -118,7 +118,7 @@ st.markdown(
 
         /* Réduire les marges entre les sections */
         .block-container {
-            padding-top: 1.4rem !important;
+            padding-top: 1.2rem !important;
             padding-bottom: 0.5rem !important;
         }
         .stMarkdown h3 {
