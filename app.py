@@ -165,7 +165,7 @@ with col2:
     st.markdown("<h1 style='color: #F5A623; margin-bottom: 0;'>NorthSentinel CORE</h1>", unsafe_allow_html=True)
     st.markdown("<p style='color: #AAAAAA; margin-top: 0; font-size: 1.2rem;'>Real‑time system monitoring cockpit — Beta</p>", unsafe_allow_html=True)
 
-st.divider()  # Gardé pour séparer le header du contenu
+st.divider()
 
 # --- FONCTIONS DE LECTURE (avec API GitHub) ---
 @st.cache_data(ttl=10)
@@ -362,9 +362,15 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         }
     )
 
-    # --- LAST SIGNAL DETAILS (tableau avec les autres métriques) ---
-    st.markdown("---")
-    st.markdown("### 🔍 Last signal details")
+else:
+    st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
+    st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
+
+# --- LAST SIGNAL DETAILS (toujours affiché, même sans signaux) ---
+st.markdown("---")
+st.markdown("### 🔍 Last signal details")
+
+if signals and isinstance(signals, list) and len(signals) > 0:
     last = signals[-1]
     detail_data = [{
         "Score": last.get('score', 0),
@@ -386,10 +392,8 @@ if signals and isinstance(signals, list) and len(signals) > 0:
             "Run time": st.column_config.TextColumn("Run time", width="medium")
         }
     )
-
 else:
-    st.info("Aucun signal trouvé dans le dépôt de données. Les signaux apparaîtront après le premier run programmé.")
-    st.caption("💡 L'interface se met à jour automatiquement toutes les 30 secondes.")
+    st.info("📭 Aucun détail de signal disponible pour le moment.")
 
 # --- FOOTER (avec un espace réduit) ---
 st.markdown(
