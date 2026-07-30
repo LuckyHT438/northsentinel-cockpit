@@ -147,6 +147,7 @@ st.markdown(
         }
         .stDataFrame th {
             font-weight: bold !important;
+            color: #F5A623 !important;
         }
 
         .block-container {
@@ -398,7 +399,7 @@ signals = fetch_signals()
 # ============================================================================
 # TODAY VALIDATED SETUPS (avec fallback pour les anciens signaux)
 # ============================================================================
-st.markdown('<h3 style="color: #F5A623;">📋 Today validated setups</h3>', unsafe_allow_html=True)
+st.markdown("### 📋 Today validated setups")
 
 if signals and isinstance(signals, list) and len(signals) > 0:
     data_latest = []
@@ -464,7 +465,7 @@ else:
 # TODAY RELATED SIGNALS DETAILS
 # ============================================================================
 st.markdown("---")
-st.markdown('<h3 style="color: #F5A623;">🔍 Today related signals details</h3>', unsafe_allow_html=True)
+st.markdown("### 🔍 Today related signals details")
 
 if signals and isinstance(signals, list) and len(signals) > 0:
     detail_data = []
