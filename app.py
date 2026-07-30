@@ -109,6 +109,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# --- CSS AVEC LA CORRECTION ROBUSTE POUR LES EN-TÊTES ORANGE ---
 st.markdown(
     """
     <style>
@@ -145,10 +146,23 @@ st.markdown(
         .stDataFrame td, .stDataFrame th {
             border: none !important;
         }
-        .stDataFrame th {
+        /* --- CORRECTION POUR LES EN-TÊTES ORANGE --- */
+        /* 1. Cibler les dataframes avec le data-testid */
+        div[data-testid="stDataFrame"] thead tr th {
+            color: #F5A623 !important;
             font-weight: bold !important;
-            color: #F5A623 !important;  /* 🔥 En-têtes des colonnes en orange */
         }
+        /* 2. Cibler les dataframes avec la classe stDataFrame */
+        .stDataFrame thead tr th {
+            color: #F5A623 !important;
+            font-weight: bold !important;
+        }
+        /* 3. Fallback général pour tous les th dans les dataframes */
+        [data-testid="stDataFrame"] th {
+            color: #F5A623 !important;
+            font-weight: bold !important;
+        }
+        /* --- FIN CORRECTION --- */
 
         .block-container {
             padding-top: 3rem !important;
