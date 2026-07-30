@@ -109,7 +109,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- CSS AVEC LA CORRECTION ROBUSTE POUR LES EN-TÊTES ORANGE ---
 st.markdown(
     """
     <style>
@@ -146,23 +145,12 @@ st.markdown(
         .stDataFrame td, .stDataFrame th {
             border: none !important;
         }
-        /* ========================================================================= */
-        /* EN-TÊTES DES TABLEAUX EN ORANGE */
-        /* ========================================================================= */
-        div[data-testid="stDataFrame"] [role="columnheader"] {
+
+        /* Correction pour colorer les en-têtes des tableaux en orange */
+        [data-testid="stDataFrame"] thead tr th,
+        .dataframe thead tr th {
             color: #F5A623 !important;
-            font-weight: 700 !important;
-        }
-        div[data-testid="stDataFrame"] .gdg-header-cell,
-        div[data-testid="stDataFrame"] .gdg-header-cell * {
-            color: #F5A623 !important;
-            font-weight: 700 !important;
-        }
-        div[data-testid="stDataFrame"] thead th,
-        .stDataFrame thead th,
-        [data-testid="stDataFrame"] th {
-            color: #F5A623 !important;
-            font-weight: 700 !important;
+            font-weight: bold !important;
         }
 
         .block-container {
