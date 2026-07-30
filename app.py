@@ -398,7 +398,7 @@ signals = fetch_signals()
 # ============================================================================
 # TODAY VALIDATED SETUPS (avec fallback pour les anciens signaux)
 # ============================================================================
-st.markdown("### <span style='color: #F5A623;'>📋 Today validated setups</span>", unsafe_allow_html=True)
+st.markdown("<h3 style='color: #F5A623;'>📋 Today validated setups</h3>", unsafe_allow_html=True)
 
 if signals and isinstance(signals, list) and len(signals) > 0:
     data_latest = []
@@ -464,7 +464,7 @@ else:
 # TODAY RELATED SIGNALS DETAILS
 # ============================================================================
 st.markdown("---")
-st.markdown("### <span style='color: #F5A623;'>🔍 Today related signals details</span>", unsafe_allow_html=True)
+st.markdown("<h3 style='color: #F5A623;'>🔍 Today related signals details</h3>", unsafe_allow_html=True)
 
 if signals and isinstance(signals, list) and len(signals) > 0:
     detail_data = []
