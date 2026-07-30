@@ -234,6 +234,69 @@ def fetch_run_status():
     except:
         return None
 
+# --- FONCTION DE NETTOYAGE PHYSIQUE VIA GITHUB API ---
+def clean_old_signals_github():
+    """
+    Supprime du fichier core_signals_today.json tous les signaux dont la date n'est pas aujourd'hui.
+    Utilise l'API GitHub pour réécrire le fichier.
+    """
+    token = st.secrets.get("GITHUB_TOKEN", "")
+    if not token:
+        st.error("❌ GITHUB_TOKEN manquant. Impossible de nettoyer le dépôt.")
+        return False
+
+    today = datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d')
+    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_PATH_SIGNALS}"
+    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
+
+    try:
+        # 1. Récupérer le fichier distant
+        r = requests.get(url, headers=headers, timeout=5)
+        if r.status_code == 404:
+            st.info("📭 Aucun fichier de signaux à nettoyer.")
+            return True
+        if r.status_code != 200:
+            st.warning(f"⚠️ Erreur API GitHub : {r.status_code}")
+            return False
+
+        data = r.json()
+        content = base64.b64decode(data["content"]).decode("utf-8")
+        signals = json.loads(content)
+
+        if not isinstance(signals, list):
+            st.warning("⚠️ Le fichier ne contient pas une liste valide.")
+            return False
+
+        # 2. Filtrer pour ne garder que les signaux d'aujourd'hui
+        cleaned = [s for s in signals if s.get('date') == today]
+        removed = len(signals) - len(cleaned)
+
+        # 3. Réécrire le fichier si des signaux ont été supprimés
+        if removed > 0:
+            new_content = json.dumps(cleaned, indent=2)
+            encoded = base64.b64encode(new_content.encode()).decode()
+
+            put_data = {
+                "message": f"Nettoyage automatique à 22h00 : {removed} signal(s) supprimé(s)",
+                "content": encoded,
+                "sha": data["sha"],
+                "branch": "main"
+            }
+
+            r = requests.put(url, headers=headers, json=put_data, timeout=5)
+            if r.status_code == 200:
+                st.success(f"🧹 Nettoyage effectué : {removed} signal(s) ancien(s) supprimé(s). {len(cleaned)} signal(s) du jour conservé(s).")
+                return True
+            else:
+                st.warning(f"⚠️ Erreur lors de l'écriture sur GitHub : {r.status_code}")
+                return False
+        else:
+            st.info(f"📭 Aucun signal ancien à nettoyer. {len(cleaned)} signal(s) du jour conservé(s).")
+            return True
+    except Exception as e:
+        st.error(f"❌ Erreur lors du nettoyage : {e}")
+        return False
+
 # --- AUTO-REFRESH INTELLIGENT ---
 run_status = fetch_run_status()
 run_active = run_status and run_status.get("run_active", False)
@@ -335,13 +398,28 @@ with st.sidebar:
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ============================================================================
-# TODAY VALIDATED SETUPS (with automatic clear at 10:00 PM Montreal time)
+# GESTION DU NETTOYAGE ET DE L'AFFICHAGE DES TABLEAUX
+# ============================================================================
+now_mtl = datetime.now(MONTREAL_TZ)
+current_hour = now_mtl.hour
+
+# --- Nettoyage physique à 22h00 (ou à la première visite après 22h00) ---
+if current_hour >= 22:
+    if not st.session_state.get("cleaned_at_22h", False):
+        with st.spinner("🧹 Nettoyage des anciens signaux..."):
+            clean_old_signals_github()
+        st.session_state["cleaned_at_22h"] = True
+else:
+    # Réinitialiser le flag si on est avant 22h00 (pour permettre un nouveau nettoyage le soir)
+    st.session_state["cleaned_at_22h"] = False
+
+# --- Déterminer si on affiche les signaux ---
+show_signals = current_hour < 22
+
+# ============================================================================
+# TODAY VALIDATED SETUPS
 # ============================================================================
 st.markdown("### 📋 Today validated setups")
-
-# --- Vérification de l'heure pour le nettoyage nocturne ---
-now_mtl = datetime.now(MONTREAL_TZ)
-show_signals = now_mtl.hour < 22  # Les signaux sont visibles jusqu'à 22h00
 
 if not show_signals:
     st.info("📭 Today's signals are no longer displayed after 10:00 PM. Come back tomorrow for new signals.")
@@ -399,7 +477,7 @@ else:
         st.caption("💡 The interface refreshes automatically every 30 seconds.")
 
 # ============================================================================
-# TODAY RELATED SIGNALS DETAILS (with automatic clear at 10:00 PM Montreal time)
+# TODAY RELATED SIGNALS DETAILS
 # ============================================================================
 st.markdown("---")
 st.markdown("### 🔍 Today related signals details")
