@@ -147,7 +147,7 @@ st.markdown(
         }
         .stDataFrame th {
             font-weight: bold !important;
-            color: #F5A623 !important;  /* Orange pour les en-tetes */
+            color: #F5A623 !important;  /* 🔥 En-têtes des colonnes en orange */
         }
 
         .block-container {
@@ -162,14 +162,6 @@ st.markdown(
         }
         .stDataFrame {
             margin-top: 0.25rem !important;
-        }
-
-        /* Forcer la couleur orange pour les en-tetes des dataframes (compatibilite) */
-        .stDataFrame thead th {
-            color: #F5A623 !important;
-        }
-        .stDataFrame thead th * {
-            color: #F5A623 !important;
         }
     </style>
     """,
@@ -277,7 +269,7 @@ def clean_old_signals_github():
         new_content = json.dumps(cleaned, indent=2)
         encoded = base64.b64encode(new_content.encode()).decode()
         put_data = {
-            "message": f"Nettoyage automatique : {removed} signal(s) supprime(s)",
+            "message": f"Nettoyage automatique : {removed} signal(s) supprimé(s)",
             "content": encoded,
             "sha": data["sha"],
             "branch": "main"
@@ -392,7 +384,7 @@ if "cleaned_today" not in st.session_state:
     st.session_state.cleaned_today = False
 
 if not st.session_state.cleaned_today:
-    with st.spinner("🧹 Verification et nettoyage des signaux..."):
+    with st.spinner("🧹 Vérification et nettoyage des signaux..."):
         signals = fetch_signals()
         if signals and isinstance(signals, list) and len(signals) > 0:
             today = datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d')
