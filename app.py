@@ -139,12 +139,12 @@ st.markdown(
         }
         .sidebar-signout button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
 
-        /* Mettre en gras les en-têtes des colonnes des dataframes */
-        [data-testid="stDataFrame"] thead tr th {
+        /* En-têtes des tableaux en orange gras */
+        table thead tr th {
+            color: #F5A623 !important;
             font-weight: bold !important;
         }
 
-        /* Réduire les marges entre les sections */
         .block-container {
             padding-top: 3rem !important;
             padding-bottom: 0.5rem !important;
