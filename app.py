@@ -16,6 +16,91 @@ GITHUB_REPO = "LuckyHT438/northsentinel-data"
 GITHUB_PATH_SIGNALS = "core_signals_today.json"
 GITHUB_PATH_STATUS = "run_status.json"
 
+# --- FONCTIONS DE CALCUL ---
+def get_market_bias_adjustment(bias_text):
+    if "Risk-on" in bias_text:
+        return {"tp": 0.005, "sl": 0.005, "trail": 0.5}
+    elif "Risk-off" in bias_text:
+        return {"tp": -0.005, "sl": -0.005, "trail": -0.5}
+    else:
+        return {"tp": 0.0, "sl": 0.0, "trail": 0.0}
+
+def get_cap_adjustment(cap_category):
+    adjustments = {
+        "Mega Cap": {"tp": 0.0, "sl": 0.0, "trail": 0.0},
+        "Large Cap": {"tp": 0.0, "sl": 0.0, "trail": 0.0},
+        "Mid Cap": {"tp": -0.002, "sl": 0.002, "trail": 0.005},
+        "Small Cap": {"tp": -0.005, "sl": 0.005, "trail": 0.010},
+        "Micro Cap": {"tp": -0.010, "sl": 0.010, "trail": 0.015},
+        "N/A": {"tp": 0.0, "sl": 0.0, "trail": 0.0}
+    }
+    return adjustments.get(cap_category, {"tp": 0.0, "sl": 0.0, "trail": 0.0})
+
+def get_tp_multiplier(score, gap, cap_category="Large Cap", market_bias=None, spread_pct=0.0):
+    if score < 6:
+        if score == 5:
+            base = 1.010
+        else:
+            base = 1.005
+    elif gap >= 20:
+        base = 1.02 + (score - 4) * 0.006
+    elif gap >= 10:
+        base = 1.015 + (score - 4) * 0.004
+    else:
+        base = 1.005 + (score - 4) * 0.002
+    cap_adj = get_cap_adjustment(cap_category)
+    bias_adj = get_market_bias_adjustment(market_bias) if market_bias else {"tp": 0.0}
+    spread_adj = spread_pct / 100.0
+    base = base + cap_adj["tp"] + bias_adj["tp"] - spread_adj
+    return round(base, 3)
+
+def get_fnb_tp_multiplier(score, gap, market_bias=None, spread_pct=0.0):
+    if score < 4:
+        base = 1.005
+    elif gap >= 6:
+        base = 1.015 + (score - 3) * 0.005
+    elif gap >= 3:
+        base = 1.01 + (score - 3) * 0.005
+    else:
+        base = 1.005 + (score - 3) * 0.005
+    bias_adj = get_market_bias_adjustment(market_bias) if market_bias else {"tp": 0.0}
+    spread_adj = spread_pct / 100.0
+    base = base + bias_adj["tp"] - spread_adj
+    return round(base, 3)
+
+def get_sl_multiplier(score, cap_category="Large Cap", market_bias=None, spread_pct=0.0):
+    if score >= 8:
+        base = 0.97
+    elif score >= 6:
+        base = 0.96
+    else:
+        base = 0.95
+    cap_adj = get_cap_adjustment(cap_category)
+    bias_adj = get_market_bias_adjustment(market_bias) if market_bias else {"sl": 0.0}
+    spread_adj = spread_pct / 200.0
+    return round(base - cap_adj["sl"] - bias_adj["sl"] - spread_adj, 3)
+
+def apply_risk_mandate(tp_mult, sl_mult, trail_pct, min_ratio=2.0, max_tp=5.0, max_sl=2.5, min_sl=0.5):
+    tp_pct = round((tp_mult - 1) * 100, 2)
+    sl_pct = round((1 - sl_mult) * 100, 2)
+    tp_pct = min(tp_pct, max_tp)
+    sl_pct = min(sl_pct, max_sl)
+    required_sl = tp_pct / min_ratio
+    if required_sl < sl_pct:
+        sl_pct = round(required_sl, 2)
+    if sl_pct < min_sl:
+        sl_pct = min_sl
+    final_tp_mult = round(1 + tp_pct / 100, 3)
+    final_sl_mult = round(1 - sl_pct / 100, 3)
+    max_allowed_trail = sl_pct * 0.8
+    if trail_pct > max_allowed_trail:
+        trail_pct = round(max_allowed_trail, 2)
+    if trail_pct < 0.3:
+        trail_pct = 0.3
+    if trail_pct > 5.0:
+        trail_pct = 5.0
+    return final_tp_mult, final_sl_mult, trail_pct
+
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="NorthSentinel CORE",
@@ -82,7 +167,6 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# --- AUTHENTIFICATION ---
 def check_password():
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
@@ -101,7 +185,6 @@ def check_password():
 if not check_password():
     st.stop()
 
-# --- HEADER ---
 col1, col2 = st.columns([1, 5], vertical_alignment="center")
 with col1:
     try:
@@ -121,7 +204,6 @@ with col2:
 
 st.divider()
 
-# --- FONCTIONS DE LECTURE (avec API GitHub) ---
 @st.cache_data(ttl=5)
 def fetch_signals():
     token = st.secrets.get("GITHUB_TOKEN", "")
@@ -157,7 +239,6 @@ def fetch_run_status():
     except:
         return None
 
-# --- FONCTION DE NETTOYAGE ---
 def clean_old_signals_github():
     token = st.secrets.get("GITHUB_TOKEN", "")
     if not token:
@@ -193,7 +274,6 @@ def clean_old_signals_github():
     except:
         return False
 
-# --- AUTO-REFRESH ---
 run_status = fetch_run_status()
 run_active = run_status and run_status.get("run_active", False)
 
@@ -202,7 +282,6 @@ if run_active:
 else:
     st_autorefresh(interval=30000, key="idle_refresh")
 
-# --- LIVE EXECUTION ---
 st.markdown("### 📡 Live Execution")
 
 if run_active:
@@ -246,7 +325,6 @@ else:
     st.info("🔹 No run in progress. Auto-refreshes every 30s to detect new signals.")
     st.caption("🔄 Auto‑refresh: 30s")
 
-# --- SYSTEM STATUS (pour la sidebar) ---
 def get_system_status():
     run_status = fetch_run_status()
     if run_status and run_status.get("run_active", False):
@@ -270,7 +348,6 @@ def get_system_status():
     minutes = (delta_next.seconds % 3600) // 60
     return "🔵", f"Next run in {hours}h {minutes:02d}min"
 
-# --- SIDEBAR ---
 with st.sidebar:
     status_emoji, status_msg = get_system_status()
     st.markdown(f"### {status_emoji} Status")
@@ -292,7 +369,7 @@ with st.sidebar:
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ============================================================================
-# NETTOYAGE SYSTÉMATIQUE AU CHARGEMENT (une fois par jour)
+# NETTOYAGE SYSTÉMATIQUE
 # ============================================================================
 if "cleaned_today" not in st.session_state:
     st.session_state.cleaned_today = False
@@ -307,11 +384,10 @@ if not st.session_state.cleaned_today:
                 clean_old_signals_github()
         st.session_state.cleaned_today = True
 
-# Récupération des signaux (propres) pour l'affichage
 signals = fetch_signals()
 
 # ============================================================================
-# TODAY VALIDATED SETUPS
+# TODAY VALIDATED SETUPS (avec fallback pour les anciens signaux)
 # ============================================================================
 st.markdown("### 📋 Today validated setups")
 
@@ -321,10 +397,30 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         entry = s.get('entry_price', 0)
         spread_pct = s.get('spread_pct', 0)
         spread_usd = round((spread_pct / 100) * entry, 2) if entry > 0 else 0
+        score = s.get('score', 0)
+        gap = s.get('gap', 0)
+        market_bias = s.get('market_bias', '')
+        asset_type = s.get('type', 'STOCK')
+        cap_cat = s.get('cap_category', 'Large Cap')
+        trail_pct = s.get('trail_percent', 0)
+
+        # --- Lire les niveaux sauvegardés ---
         tp_price = s.get('tp_price', 0)
         sl_price = s.get('sl_price', 0)
-        trail_pct = s.get('trail_percent', 0)
         trailing_price = s.get('trailing_price', 0)
+
+        # --- Fallback : si les niveaux sont à 0 (anciens signaux), on les recalcule ---
+        if tp_price == 0 and entry > 0:
+            if asset_type == 'ETF':
+                tp_mult_brut = get_fnb_tp_multiplier(score, gap, market_bias, spread_pct)
+            else:
+                tp_mult_brut = get_tp_multiplier(score, gap, cap_cat, market_bias, spread_pct)
+            sl_mult_brut = get_sl_multiplier(score, cap_cat if asset_type != 'ETF' else "Large Cap", market_bias, spread_pct)
+            tp_mult, sl_mult, trail_pct_calc = apply_risk_mandate(tp_mult_brut, sl_mult_brut, trail_pct)
+            tp_price = round(entry * tp_mult, 2)
+            sl_price = round(entry * sl_mult, 2)
+            trailing_price = round(entry * (1 - trail_pct_calc/100), 2) if trail_pct_calc > 0 else 0
+            trail_pct = trail_pct_calc
 
         data_latest.append({
             "Ticker": s.get('ticker', 'N/A'),
@@ -402,7 +498,6 @@ if signals and isinstance(signals, list) and len(signals) > 0:
 else:
     st.info("📭 No signal details available for today.")
 
-# --- FOOTER ---
 st.markdown(
     "<p style='text-align: center; color: #666; font-size: 0.8rem; margin-top: 1rem;'>NorthSentinel CORE – Cockpit v2.0 – July, 2026 © NorthSentinel Trading</p>",
     unsafe_allow_html=True
