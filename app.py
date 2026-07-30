@@ -109,7 +109,6 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# --- CSS AVEC LA CORRECTION ROBUSTE POUR LES EN-TÊTES ORANGE ---
 st.markdown(
     """
     <style>
@@ -146,23 +145,9 @@ st.markdown(
         .stDataFrame td, .stDataFrame th {
             border: none !important;
         }
-        /* --- CORRECTION POUR LES EN-TÊTES ORANGE --- */
-        /* 1. Cibler les dataframes avec le data-testid */
-        div[data-testid="stDataFrame"] thead tr th {
-            color: #F5A623 !important;
+        .stDataFrame th {
             font-weight: bold !important;
         }
-        /* 2. Cibler les dataframes avec la classe stDataFrame */
-        .stDataFrame thead tr th {
-            color: #F5A623 !important;
-            font-weight: bold !important;
-        }
-        /* 3. Fallback général pour tous les th dans les dataframes */
-        [data-testid="stDataFrame"] th {
-            color: #F5A623 !important;
-            font-weight: bold !important;
-        }
-        /* --- FIN CORRECTION --- */
 
         .block-container {
             padding-top: 3rem !important;
@@ -413,7 +398,7 @@ signals = fetch_signals()
 # ============================================================================
 # TODAY VALIDATED SETUPS (avec fallback pour les anciens signaux)
 # ============================================================================
-st.markdown("### 📋 Today validated setups")
+st.markdown('<h3 style="color: #F5A623;">📋 Today validated setups</h3>', unsafe_allow_html=True)
 
 if signals and isinstance(signals, list) and len(signals) > 0:
     data_latest = []
@@ -479,7 +464,7 @@ else:
 # TODAY RELATED SIGNALS DETAILS
 # ============================================================================
 st.markdown("---")
-st.markdown("### 🔍 Today related signals details")
+st.markdown('<h3 style="color: #F5A623;">🔍 Today related signals details</h3>', unsafe_allow_html=True)
 
 if signals and isinstance(signals, list) and len(signals) > 0:
     detail_data = []
