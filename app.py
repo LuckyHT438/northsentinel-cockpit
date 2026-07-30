@@ -139,20 +139,12 @@ st.markdown(
         }
         .sidebar-signout button:hover { background-color: #e0951a !important; color: #0E1117 !important; }
 
-        .stDataFrame {
-            border: none !important;
-        }
-        .stDataFrame td, .stDataFrame th {
-            border: none !important;
-        }
-
-        /* Correction pour colorer les en-têtes des tableaux en orange */
-        [data-testid="stDataFrame"] thead tr th,
-        .dataframe thead tr th {
-            color: #F5A623 !important;
+        /* Mettre en gras les en-têtes des colonnes des dataframes */
+        [data-testid="stDataFrame"] thead tr th {
             font-weight: bold !important;
         }
 
+        /* Réduire les marges entre les sections */
         .block-container {
             padding-top: 3rem !important;
             padding-bottom: 0.5rem !important;
