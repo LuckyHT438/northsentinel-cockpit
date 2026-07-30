@@ -54,6 +54,21 @@ def get_tp_multiplier(score, gap, cap_category="Large Cap", market_bias=None, sp
     base = base + cap_adj["tp"] + bias_adj["tp"] - spread_adj
     return round(base, 3)
 
+# --- FONCTION SPÉCIFIQUE POUR LES ETFs (copiée du Core) ---
+def get_fnb_tp_multiplier(score, gap, market_bias=None, spread_pct=0.0):
+    if score < 4:
+        base = 1.005
+    elif gap >= 6:
+        base = 1.015 + (score - 3) * 0.005
+    elif gap >= 3:
+        base = 1.01 + (score - 3) * 0.005
+    else:
+        base = 1.005 + (score - 3) * 0.005
+    bias_adj = get_market_bias_adjustment(market_bias) if market_bias else {"tp": 0.0}
+    spread_adj = spread_pct / 100.0
+    base = base + bias_adj["tp"] - spread_adj
+    return round(base, 3)
+
 def get_sl_multiplier(score, cap_category="Large Cap", market_bias=None, spread_pct=0.0):
     if score >= 8:
         base = 0.97
@@ -236,11 +251,6 @@ def fetch_run_status():
 
 # --- FONCTION DE NETTOYAGE PHYSIQUE VIA GITHUB API ---
 def clean_old_signals_github():
-    """
-    Supprime du fichier core_signals_today.json tous les signaux dont la date n'est pas aujourd'hui.
-    Utilise l'API GitHub pour réécrire le fichier.
-    Retourne True si le fichier a été modifié, False sinon.
-    """
     token = st.secrets.get("GITHUB_TOKEN", "")
     if not token:
         st.error("❌ GITHUB_TOKEN manquant. Impossible de nettoyer le dépôt.")
@@ -251,10 +261,8 @@ def clean_old_signals_github():
     headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
 
     try:
-        # 1. Récupérer le fichier distant
         r = requests.get(url, headers=headers, timeout=5)
         if r.status_code == 404:
-            # Fichier inexistant, rien à nettoyer
             return False
         if r.status_code != 200:
             st.warning(f"⚠️ Erreur API GitHub : {r.status_code}")
@@ -268,14 +276,12 @@ def clean_old_signals_github():
             st.warning("⚠️ Le fichier ne contient pas une liste valide.")
             return False
 
-        # 2. Filtrer pour ne garder que les signaux d'aujourd'hui
         cleaned = [s for s in signals if s.get('date') == today]
         removed = len(signals) - len(cleaned)
 
         if removed == 0:
-            return False  # Aucun signal ancien
+            return False
 
-        # 3. Réécrire le fichier
         new_content = json.dumps(cleaned, indent=2)
         encoded = base64.b64encode(new_content.encode()).decode()
 
@@ -398,27 +404,22 @@ with st.sidebar:
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ============================================================================
-# NETTOYAGE SYSTÉMATIQUE AU CHARGEMENT
+# NETTOYAGE SYSTÉMATIQUE AU CHARGEMENT (une fois par jour)
 # ============================================================================
-# On nettoie les signaux anciens à chaque chargement, mais on utilise un flag
-# pour ne pas répéter l'opération inutilement en cas de rechargement rapide.
 if "cleaned_today" not in st.session_state:
     st.session_state.cleaned_today = False
 
-# Si on n'a pas encore nettoyé aujourd'hui, on le fait maintenant
 if not st.session_state.cleaned_today:
     with st.spinner("🧹 Vérification et nettoyage des signaux..."):
-        # Récupérer les signaux pour voir s'il y a des anciens
         signals = fetch_signals()
         if signals and isinstance(signals, list) and len(signals) > 0:
             today = datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d')
             has_old = any(s.get('date') != today for s in signals)
             if has_old:
                 clean_old_signals_github()
-        # Marquer comme nettoyé pour la journée
         st.session_state.cleaned_today = True
 
-# --- Récupération des signaux (propres) pour l'affichage ---
+# Récupération des signaux (propres) pour l'affichage
 signals = fetch_signals()
 
 # ============================================================================
@@ -435,10 +436,17 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         score = s.get('score', 0)
         gap = s.get('gap', 0)
         market_bias = s.get('market_bias', '')
-        cap_cat = s.get('cap_category', 'Large Cap')
+        asset_type = s.get('type', 'STOCK')
 
-        tp_mult_brut = get_tp_multiplier(score, gap, cap_cat, market_bias, spread_pct)
-        sl_mult_brut = get_sl_multiplier(score, cap_cat, market_bias, spread_pct)
+        # --- Sélection des fonctions selon le type ---
+        if asset_type == 'ETF':
+            tp_mult_brut = get_fnb_tp_multiplier(score, gap, market_bias, spread_pct)
+            sl_mult_brut = get_sl_multiplier(score, "Large Cap", market_bias, spread_pct)
+        else:
+            cap_cat = s.get('cap_category', 'Large Cap')
+            tp_mult_brut = get_tp_multiplier(score, gap, cap_cat, market_bias, spread_pct)
+            sl_mult_brut = get_sl_multiplier(score, cap_cat, market_bias, spread_pct)
+
         trail_pct_brut = s.get('trail_percent', 0)
 
         tp_mult, sl_mult, trail_pct = apply_risk_mandate(tp_mult_brut, sl_mult_brut, trail_pct_brut)
