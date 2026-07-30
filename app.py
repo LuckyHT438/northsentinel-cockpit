@@ -335,108 +335,119 @@ with st.sidebar:
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ============================================================================
-# TODAY VALIDATED SETUPS
+# TODAY VALIDATED SETUPS (with automatic clear at 10:00 PM Montreal time)
 # ============================================================================
 st.markdown("### 📋 Today validated setups")
 
-signals = fetch_signals()
+# --- Vérification de l'heure pour le nettoyage nocturne ---
+now_mtl = datetime.now(MONTREAL_TZ)
+show_signals = now_mtl.hour < 22  # Les signaux sont visibles jusqu'à 22h00
 
-if signals and isinstance(signals, list) and len(signals) > 0:
-    data_latest = []
-    for s in signals:
-        entry = s.get('entry_price', 0)
-        spread_pct = s.get('spread_pct', 0)
-        spread_usd = round((spread_pct / 100) * entry, 2) if entry > 0 else 0
-        score = s.get('score', 0)
-        gap = s.get('gap', 0)
-        market_bias = s.get('market_bias', '')
-        cap_cat = s.get('cap_category', 'Large Cap')
-
-        tp_mult_brut = get_tp_multiplier(score, gap, cap_cat, market_bias, spread_pct)
-        sl_mult_brut = get_sl_multiplier(score, cap_cat, market_bias, spread_pct)
-        trail_pct_brut = s.get('trail_percent', 0)
-
-        tp_mult, sl_mult, trail_pct = apply_risk_mandate(tp_mult_brut, sl_mult_brut, trail_pct_brut)
-
-        tp_price = round(entry * tp_mult, 2)
-        sl_price = round(entry * sl_mult, 2)
-        trail_price = round(entry * (1 - trail_pct/100), 2) if trail_pct > 0 else 0
-
-        data_latest.append({
-            "Ticker": s.get('ticker', 'N/A'),
-            "Exchange": s.get('exchange', 'N/A'),
-            "Spread": f"{spread_pct:.2f}% (${spread_usd:.2f})",
-            "Entry": f"${entry:.2f}",
-            "TP": f"${tp_price:.2f}",
-            "SL": f"${sl_price:.2f}",
-            "Trailing Stop": f"${trail_price:.2f} ({trail_pct:.2f}%)"
-        })
-
-    df_latest = pd.DataFrame(data_latest)
-    st.dataframe(
-        df_latest,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-            "Exchange": st.column_config.TextColumn("Exchange", width="small"),
-            "Spread": st.column_config.TextColumn("Spread", width="small"),
-            "Entry": st.column_config.TextColumn("Entry", width="small"),
-            "TP": st.column_config.TextColumn("TP", width="small"),
-            "SL": st.column_config.TextColumn("SL", width="small"),
-            "Trailing Stop": st.column_config.TextColumn("Trailing Stop", width="medium")
-        }
-    )
+if not show_signals:
+    st.info("📭 Today's signals are no longer displayed after 10:00 PM. Come back tomorrow for new signals.")
 else:
-    st.info("No signals found in the data repository. Signals will appear after the first scheduled run.")
-    st.caption("💡 The interface refreshes automatically every 30 seconds.")
+    signals = fetch_signals()
+
+    if signals and isinstance(signals, list) and len(signals) > 0:
+        data_latest = []
+        for s in signals:
+            entry = s.get('entry_price', 0)
+            spread_pct = s.get('spread_pct', 0)
+            spread_usd = round((spread_pct / 100) * entry, 2) if entry > 0 else 0
+            score = s.get('score', 0)
+            gap = s.get('gap', 0)
+            market_bias = s.get('market_bias', '')
+            cap_cat = s.get('cap_category', 'Large Cap')
+
+            tp_mult_brut = get_tp_multiplier(score, gap, cap_cat, market_bias, spread_pct)
+            sl_mult_brut = get_sl_multiplier(score, cap_cat, market_bias, spread_pct)
+            trail_pct_brut = s.get('trail_percent', 0)
+
+            tp_mult, sl_mult, trail_pct = apply_risk_mandate(tp_mult_brut, sl_mult_brut, trail_pct_brut)
+
+            tp_price = round(entry * tp_mult, 2)
+            sl_price = round(entry * sl_mult, 2)
+            trail_price = round(entry * (1 - trail_pct/100), 2) if trail_pct > 0 else 0
+
+            data_latest.append({
+                "Ticker": s.get('ticker', 'N/A'),
+                "Exchange": s.get('exchange', 'N/A'),
+                "Spread": f"{spread_pct:.2f}% (${spread_usd:.2f})",
+                "Entry": f"${entry:.2f}",
+                "TP": f"${tp_price:.2f}",
+                "SL": f"${sl_price:.2f}",
+                "Trailing Stop": f"${trail_price:.2f} ({trail_pct:.2f}%)"
+            })
+
+        df_latest = pd.DataFrame(data_latest)
+        st.dataframe(
+            df_latest,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Ticker": st.column_config.TextColumn("Ticker", width="small"),
+                "Exchange": st.column_config.TextColumn("Exchange", width="small"),
+                "Spread": st.column_config.TextColumn("Spread", width="small"),
+                "Entry": st.column_config.TextColumn("Entry", width="small"),
+                "TP": st.column_config.TextColumn("TP", width="small"),
+                "SL": st.column_config.TextColumn("SL", width="small"),
+                "Trailing Stop": st.column_config.TextColumn("Trailing Stop", width="medium")
+            }
+        )
+    else:
+        st.info("No signals found in the data repository. Signals will appear after the first scheduled run.")
+        st.caption("💡 The interface refreshes automatically every 30 seconds.")
 
 # ============================================================================
-# TODAY RELATED SIGNALS DETAILS
+# TODAY RELATED SIGNALS DETAILS (with automatic clear at 10:00 PM Montreal time)
 # ============================================================================
 st.markdown("---")
 st.markdown("### 🔍 Today related signals details")
 
-if signals and isinstance(signals, list) and len(signals) > 0:
-    detail_data = []
-    for s in signals:
-        asset_type = s.get('type', 'STOCK')
-        if asset_type == 'ETF':
-            aum_m = s.get('aum_m', 0)
-            if aum_m >= 1000:
-                cap_aum = f"{aum_m/1000:.1f}B$"
-            elif aum_m > 0:
-                cap_aum = f"{aum_m:.1f}M$"
-            else:
-                cap_aum = "N/A"
-        else:
-            cap_aum = s.get('cap_category', 'N/A')
-
-        detail_data.append({
-            "Score": s.get('score', 0),
-            "Cap./AUM": cap_aum,
-            "Gap": f"{s.get('gap', 0):.1f}%",
-            "Vol. ratio": f"{s.get('vol_ratio', 0):.1f}x",
-            "Market bias": s.get('market_bias', 'N/A'),
-            "Run time": s.get('timestamp', 'N/A')
-        })
-
-    df_detail = pd.DataFrame(detail_data)
-    st.dataframe(
-        df_detail,
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "Score": st.column_config.NumberColumn("Score", width="small", alignment="left"),
-            "Cap./AUM": st.column_config.TextColumn("Cap./AUM", width="small"),
-            "Gap": st.column_config.TextColumn("Gap", width="small"),
-            "Vol. ratio": st.column_config.TextColumn("Vol. ratio", width="small"),
-            "Market bias": st.column_config.TextColumn("Market bias", width="medium"),
-            "Run time": st.column_config.TextColumn("Run time", width="medium")
-        }
-    )
+if not show_signals:
+    st.info("📭 Today's signals are no longer displayed after 10:00 PM. Come back tomorrow for new signals.")
 else:
-    st.info("📭 No signal details available at the moment.")
+    # Les signaux sont déjà chargés dans la section précédente (variable 'signals')
+    if signals and isinstance(signals, list) and len(signals) > 0:
+        detail_data = []
+        for s in signals:
+            asset_type = s.get('type', 'STOCK')
+            if asset_type == 'ETF':
+                aum_m = s.get('aum_m', 0)
+                if aum_m >= 1000:
+                    cap_aum = f"{aum_m/1000:.1f}B$"
+                elif aum_m > 0:
+                    cap_aum = f"{aum_m:.1f}M$"
+                else:
+                    cap_aum = "N/A"
+            else:
+                cap_aum = s.get('cap_category', 'N/A')
+
+            detail_data.append({
+                "Score": s.get('score', 0),
+                "Cap./AUM": cap_aum,
+                "Gap": f"{s.get('gap', 0):.1f}%",
+                "Vol. ratio": f"{s.get('vol_ratio', 0):.1f}x",
+                "Market bias": s.get('market_bias', 'N/A'),
+                "Run time": s.get('timestamp', 'N/A')
+            })
+
+        df_detail = pd.DataFrame(detail_data)
+        st.dataframe(
+            df_detail,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Score": st.column_config.NumberColumn("Score", width="small", alignment="left"),
+                "Cap./AUM": st.column_config.TextColumn("Cap./AUM", width="small"),
+                "Gap": st.column_config.TextColumn("Gap", width="small"),
+                "Vol. ratio": st.column_config.TextColumn("Vol. ratio", width="small"),
+                "Market bias": st.column_config.TextColumn("Market bias", width="medium"),
+                "Run time": st.column_config.TextColumn("Run time", width="medium")
+            }
+        )
+    else:
+        st.info("📭 No signal details available at the moment.")
 
 # --- FOOTER ---
 st.markdown(
