@@ -16,98 +16,6 @@ GITHUB_REPO = "LuckyHT438/northsentinel-data"
 GITHUB_PATH_SIGNALS = "core_signals_today.json"
 GITHUB_PATH_STATUS = "run_status.json"
 
-# --- FONCTIONS DE CALCUL (reproduites depuis le Core) ---
-def get_market_bias_adjustment(bias_text):
-    if "Risk-on" in bias_text:
-        return {"tp": 0.005, "sl": 0.005, "trail": 0.5}
-    elif "Risk-off" in bias_text:
-        return {"tp": -0.005, "sl": -0.005, "trail": -0.5}
-    else:
-        return {"tp": 0.0, "sl": 0.0, "trail": 0.0}
-
-def get_cap_adjustment(cap_category):
-    adjustments = {
-        "Mega Cap": {"tp": 0.0, "sl": 0.0, "trail": 0.0},
-        "Large Cap": {"tp": 0.0, "sl": 0.0, "trail": 0.0},
-        "Mid Cap": {"tp": -0.002, "sl": 0.002, "trail": 0.005},
-        "Small Cap": {"tp": -0.005, "sl": 0.005, "trail": 0.010},
-        "Micro Cap": {"tp": -0.010, "sl": 0.010, "trail": 0.015},
-        "N/A": {"tp": 0.0, "sl": 0.0, "trail": 0.0}
-    }
-    return adjustments.get(cap_category, {"tp": 0.0, "sl": 0.0, "trail": 0.0})
-
-def get_tp_multiplier(score, gap, cap_category="Large Cap", market_bias=None, spread_pct=0.0):
-    if score < 6:
-        if score == 5:
-            base = 1.010
-        else:
-            base = 1.005
-    elif gap >= 20:
-        base = 1.02 + (score - 4) * 0.006
-    elif gap >= 10:
-        base = 1.015 + (score - 4) * 0.004
-    else:
-        base = 1.005 + (score - 4) * 0.002
-    cap_adj = get_cap_adjustment(cap_category)
-    bias_adj = get_market_bias_adjustment(market_bias) if market_bias else {"tp": 0.0}
-    spread_adj = spread_pct / 100.0
-    base = base + cap_adj["tp"] + bias_adj["tp"] - spread_adj
-    return round(base, 3)
-
-# --- FONCTION SPÉCIFIQUE POUR LES ETFs (copiée du Core) ---
-def get_fnb_tp_multiplier(score, gap, market_bias=None, spread_pct=0.0):
-    if score < 4:
-        base = 1.005
-    elif gap >= 6:
-        base = 1.015 + (score - 3) * 0.005
-    elif gap >= 3:
-        base = 1.01 + (score - 3) * 0.005
-    else:
-        base = 1.005 + (score - 3) * 0.005
-    bias_adj = get_market_bias_adjustment(market_bias) if market_bias else {"tp": 0.0}
-    spread_adj = spread_pct / 100.0
-    base = base + bias_adj["tp"] - spread_adj
-    return round(base, 3)
-
-def get_sl_multiplier(score, cap_category="Large Cap", market_bias=None, spread_pct=0.0):
-    if score >= 8:
-        base = 0.97
-    elif score >= 6:
-        base = 0.96
-    else:
-        base = 0.95
-    cap_adj = get_cap_adjustment(cap_category)
-    bias_adj = get_market_bias_adjustment(market_bias) if market_bias else {"sl": 0.0}
-    spread_adj = spread_pct / 200.0
-    return round(base - cap_adj["sl"] - bias_adj["sl"] - spread_adj, 3)
-
-def apply_risk_mandate(tp_mult, sl_mult, trail_pct, min_ratio=2.0, max_tp=5.0, max_sl=2.5, min_sl=0.5):
-    tp_pct = round((tp_mult - 1) * 100, 2)
-    sl_pct = round((1 - sl_mult) * 100, 2)
-
-    tp_pct = min(tp_pct, max_tp)
-    sl_pct = min(sl_pct, max_sl)
-
-    required_sl = tp_pct / min_ratio
-    if required_sl < sl_pct:
-        sl_pct = round(required_sl, 2)
-
-    if sl_pct < min_sl:
-        sl_pct = min_sl
-
-    final_tp_mult = round(1 + tp_pct / 100, 3)
-    final_sl_mult = round(1 - sl_pct / 100, 3)
-
-    max_allowed_trail = sl_pct * 0.8
-    if trail_pct > max_allowed_trail:
-        trail_pct = round(max_allowed_trail, 2)
-    if trail_pct < 0.3:
-        trail_pct = 0.3
-    if trail_pct > 5.0:
-        trail_pct = 5.0
-
-    return final_tp_mult, final_sl_mult, trail_pct
-
 # --- PAGE CONFIGURATION ---
 st.set_page_config(
     page_title="NorthSentinel CORE",
@@ -249,61 +157,43 @@ def fetch_run_status():
     except:
         return None
 
-# --- FONCTION DE NETTOYAGE PHYSIQUE VIA GITHUB API ---
+# --- FONCTION DE NETTOYAGE ---
 def clean_old_signals_github():
     token = st.secrets.get("GITHUB_TOKEN", "")
     if not token:
-        st.error("❌ GITHUB_TOKEN manquant. Impossible de nettoyer le dépôt.")
         return False
-
     today = datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d')
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_PATH_SIGNALS}"
     headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
-
     try:
         r = requests.get(url, headers=headers, timeout=5)
         if r.status_code == 404:
             return False
         if r.status_code != 200:
-            st.warning(f"⚠️ Erreur API GitHub : {r.status_code}")
             return False
-
         data = r.json()
         content = base64.b64decode(data["content"]).decode("utf-8")
         signals = json.loads(content)
-
         if not isinstance(signals, list):
-            st.warning("⚠️ Le fichier ne contient pas une liste valide.")
             return False
-
         cleaned = [s for s in signals if s.get('date') == today]
         removed = len(signals) - len(cleaned)
-
         if removed == 0:
             return False
-
         new_content = json.dumps(cleaned, indent=2)
         encoded = base64.b64encode(new_content.encode()).decode()
-
         put_data = {
             "message": f"Nettoyage automatique : {removed} signal(s) supprimé(s)",
             "content": encoded,
             "sha": data["sha"],
             "branch": "main"
         }
-
         r = requests.put(url, headers=headers, json=put_data, timeout=5)
-        if r.status_code == 200:
-            st.success(f"🧹 Nettoyage effectué : {removed} signal(s) ancien(s) supprimé(s). {len(cleaned)} signal(s) du jour conservé(s).")
-            return True
-        else:
-            st.warning(f"⚠️ Erreur lors de l'écriture sur GitHub : {r.status_code}")
-            return False
-    except Exception as e:
-        st.error(f"❌ Erreur lors du nettoyage : {e}")
+        return r.status_code == 200
+    except:
         return False
 
-# --- AUTO-REFRESH INTELLIGENT ---
+# --- AUTO-REFRESH ---
 run_status = fetch_run_status()
 run_active = run_status and run_status.get("run_active", False)
 
@@ -361,7 +251,6 @@ def get_system_status():
     run_status = fetch_run_status()
     if run_status and run_status.get("run_active", False):
         return "🟢", "Run in progress"
-
     now = datetime.now(MONTREAL_TZ)
     run_times = [
         now.replace(hour=10, minute=0, second=0, microsecond=0),
@@ -376,7 +265,6 @@ def get_system_status():
             break
     if next_run is None:
         next_run = run_times[0] + timedelta(days=1)
-
     delta_next = next_run - now
     hours = delta_next.seconds // 3600
     minutes = (delta_next.seconds % 3600) // 60
@@ -433,27 +321,10 @@ if signals and isinstance(signals, list) and len(signals) > 0:
         entry = s.get('entry_price', 0)
         spread_pct = s.get('spread_pct', 0)
         spread_usd = round((spread_pct / 100) * entry, 2) if entry > 0 else 0
-        score = s.get('score', 0)
-        gap = s.get('gap', 0)
-        market_bias = s.get('market_bias', '')
-        asset_type = s.get('type', 'STOCK')
-
-        # --- Sélection des fonctions selon le type ---
-        if asset_type == 'ETF':
-            tp_mult_brut = get_fnb_tp_multiplier(score, gap, market_bias, spread_pct)
-            sl_mult_brut = get_sl_multiplier(score, "Large Cap", market_bias, spread_pct)
-        else:
-            cap_cat = s.get('cap_category', 'Large Cap')
-            tp_mult_brut = get_tp_multiplier(score, gap, cap_cat, market_bias, spread_pct)
-            sl_mult_brut = get_sl_multiplier(score, cap_cat, market_bias, spread_pct)
-
-        trail_pct_brut = s.get('trail_percent', 0)
-
-        tp_mult, sl_mult, trail_pct = apply_risk_mandate(tp_mult_brut, sl_mult_brut, trail_pct_brut)
-
-        tp_price = round(entry * tp_mult, 2)
-        sl_price = round(entry * sl_mult, 2)
-        trail_price = round(entry * (1 - trail_pct/100), 2) if trail_pct > 0 else 0
+        tp_price = s.get('tp_price', 0)
+        sl_price = s.get('sl_price', 0)
+        trail_pct = s.get('trail_percent', 0)
+        trailing_price = s.get('trailing_price', 0)
 
         data_latest.append({
             "Ticker": s.get('ticker', 'N/A'),
@@ -462,7 +333,7 @@ if signals and isinstance(signals, list) and len(signals) > 0:
             "Entry": f"${entry:.2f}",
             "TP": f"${tp_price:.2f}",
             "SL": f"${sl_price:.2f}",
-            "Trailing Stop": f"${trail_price:.2f} ({trail_pct:.2f}%)"
+            "Trailing Stop": f"${trailing_price:.2f} ({trail_pct:.2f}%)"
         })
 
     df_latest = pd.DataFrame(data_latest)
