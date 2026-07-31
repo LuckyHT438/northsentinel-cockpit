@@ -323,7 +323,7 @@ if show_signals:
 st.markdown("### 📋 Today validated setups")
 
 if not show_signals:
-    st.info("📭 Today's signals are no longer displayed after 10:00 PM. Come back tomorrow for new signals.")
+    st.info("📭 Today's validated setups are no longer displayed after 10:00 PM. Come back tomorrow for new signals.")
 else:
     if signals and isinstance(signals, list) and len(signals) > 0:
         data_latest = []
@@ -385,7 +385,7 @@ st.markdown("---")
 st.markdown("### 🔍 Today related signals details")
 
 if not show_signals:
-    st.info("📭 Today's signals are no longer displayed after 10:00 PM. Come back tomorrow for new signals.")
+    st.info("📭 Today's signals details are no longer displayed after 10:00 PM. Come back tomorrow for new signals.")
 else:
     if signals and isinstance(signals, list) and len(signals) > 0:
         detail_data = []
