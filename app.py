@@ -157,7 +157,7 @@ def fetch_run_status():
     except:
         return None
 
-# --- FONCTION DE NETTOYAGE (utile pour la sidebar) ---
+# --- FONCTION DE NETTOYAGE ---
 def clean_old_signals_github():
     token = st.secrets.get("GITHUB_TOKEN", "")
     if not token:
@@ -292,91 +292,81 @@ with st.sidebar:
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ============================================================================
-# VÉRIFICATION HORAIRE POUR L'AFFICHAGE DES TABLEAUX
+# FILTRAGE DES SIGNAUX PAR DATE (aujourd'hui uniquement)
 # ============================================================================
-now_mtl = datetime.now(MONTREAL_TZ)
-show_signals = now_mtl.hour < 22  # Les signaux sont visibles jusqu'à 22h00
+today = datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d')
+signals_raw = fetch_signals()
+signals = [s for s in signals_raw if s.get('date') == today] if isinstance(signals_raw, list) else []
 
 # ============================================================================
-# NETTOYAGE SYSTÉMATIQUE AU CHARGEMENT (uniquement si on affiche les signaux)
+# NETTOYAGE SYSTÉMATIQUE AU CHARGEMENT (une fois par jour)
 # ============================================================================
-if show_signals:
-    if "cleaned_today" not in st.session_state:
-        st.session_state.cleaned_today = False
+if "cleaned_today" not in st.session_state:
+    st.session_state.cleaned_today = False
 
-    if not st.session_state.cleaned_today:
-        with st.spinner("🧹 Vérification et nettoyage des signaux..."):
-            signals = fetch_signals()
-            if signals and isinstance(signals, list) and len(signals) > 0:
-                today = datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d')
-                has_old = any(s.get('date') != today for s in signals)
-                if has_old:
-                    clean_old_signals_github()
-            st.session_state.cleaned_today = True
-
-    # Récupération des signaux (propres) pour l'affichage
-    signals = fetch_signals()
+if not st.session_state.cleaned_today and signals:
+    with st.spinner("🧹 Vérification et nettoyage des signaux..."):
+        # On vérifie s'il y a des signaux anciens dans le fichier distant
+        has_old = any(s.get('date') != today for s in signals_raw)
+        if has_old:
+            clean_old_signals_github()
+        st.session_state.cleaned_today = True
 
 # ============================================================================
 # TODAY VALIDATED SETUPS
 # ============================================================================
 st.markdown("### 📋 Today validated setups")
 
-if not show_signals:
-    st.info("📭 Today's validated setups are no longer displayed after 10:00 PM. Come back tomorrow for new signals.")
+if not signals:
+    st.info("No signals found for today. Signals will appear after the first scheduled run.")
+    st.caption("💡 The interface refreshes automatically every 30 seconds.")
 else:
-    if signals and isinstance(signals, list) and len(signals) > 0:
-        data_latest = []
-        for s in signals:
-            entry = s.get('entry_price', 0)
-            spread_pct = s.get('spread_pct', 0)
-            spread_usd = round((spread_pct / 100) * entry, 2) if entry > 0 else 0
-            tp_price = s.get('tp_price', 0)
-            sl_price = s.get('sl_price', 0)
-            trailing_price = s.get('trailing_price', 0)
-            trail_pct = s.get('trail_percent', 0)
+    data_latest = []
+    for s in signals:
+        entry = s.get('entry_price', 0)
+        spread_pct = s.get('spread_pct', 0)
+        spread_usd = round((spread_pct / 100) * entry, 2) if entry > 0 else 0
+        tp_price = s.get('tp_price', 0)
+        sl_price = s.get('sl_price', 0)
+        trailing_price = s.get('trailing_price', 0)
+        trail_pct = s.get('trail_percent', 0)
 
-            # Fallback pour les anciens signaux (si les niveaux ne sont pas stockés)
-            if tp_price == 0 and entry > 0:
-                # Comme on a déjà les fonctions de calcul dans le cockpit, on peut les réutiliser
-                # Mais pour simplifier, on utilise les multiplicateurs si présents
-                tp_mult = s.get('tp_mult', 0)
-                sl_mult = s.get('sl_mult', 0)
-                trail_pct_stored = s.get('trail_pct', 0)
-                if tp_mult > 0:
-                    tp_price = round(entry * tp_mult, 2)
-                    sl_price = round(entry * sl_mult, 2)
-                    trailing_price = round(entry * (1 - trail_pct_stored/100), 2) if trail_pct_stored > 0 else 0
-                    trail_pct = trail_pct_stored
+        # Fallback pour les anciens signaux (si les niveaux ne sont pas stockés)
+        if tp_price == 0 and entry > 0:
+            tp_mult = s.get('tp_mult', 0)
+            sl_mult = s.get('sl_mult', 0)
+            trail_pct_stored = s.get('trail_pct', 0)
+            if tp_mult > 0:
+                tp_price = round(entry * tp_mult, 2)
+                sl_price = round(entry * sl_mult, 2)
+                trailing_price = round(entry * (1 - trail_pct_stored/100), 2) if trail_pct_stored > 0 else 0
+                trail_pct = trail_pct_stored
 
-            data_latest.append({
-                "Ticker": s.get('ticker', 'N/A'),
-                "Exchange": s.get('exchange', 'N/A'),
-                "Spread": f"{spread_pct:.2f}% (${spread_usd:.2f})",
-                "Entry": f"${entry:.2f}",
-                "TP": f"${tp_price:.2f}",
-                "SL": f"${sl_price:.2f}",
-                "Trailing Stop": f"${trailing_price:.2f} ({trail_pct:.2f}%)"
-            })
+        data_latest.append({
+            "Ticker": s.get('ticker', 'N/A'),
+            "Exchange": s.get('exchange', 'N/A'),
+            "Spread": f"{spread_pct:.2f}% (${spread_usd:.2f})",
+            "Entry": f"${entry:.2f}",
+            "TP": f"${tp_price:.2f}",
+            "SL": f"${sl_price:.2f}",
+            "Trailing Stop": f"${trailing_price:.2f} ({trail_pct:.2f}%)"
+        })
 
-        df_latest = pd.DataFrame(data_latest)
-        st.dataframe(
-            df_latest,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Ticker": st.column_config.TextColumn("Ticker", width="small"),
-                "Exchange": st.column_config.TextColumn("Exchange", width="small"),
-                "Spread": st.column_config.TextColumn("Spread", width="small"),
-                "Entry": st.column_config.TextColumn("Entry", width="small"),
-                "TP": st.column_config.TextColumn("TP", width="small"),
-                "SL": st.column_config.TextColumn("SL", width="small"),
-                "Trailing Stop": st.column_config.TextColumn("Trailing Stop", width="medium")
-            }
-        )
-    else:
-        st.info("No signals found for today. Signals will appear after the first scheduled run.")
-        st.caption("💡 The interface refreshes automatically every 30 seconds.")
+    df_latest = pd.DataFrame(data_latest)
+    st.dataframe(
+        df_latest,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Ticker": st.column_config.TextColumn("Ticker", width="small"),
+            "Exchange": st.column_config.TextColumn("Exchange", width="small"),
+            "Spread": st.column_config.TextColumn("Spread", width="small"),
+            "Entry": st.column_config.TextColumn("Entry", width="small"),
+            "TP": st.column_config.TextColumn("TP", width="small"),
+            "SL": st.column_config.TextColumn("SL", width="small"),
+            "Trailing Stop": st.column_config.TextColumn("Trailing Stop", width="medium")
+        }
+    )
 
 # ============================================================================
 # TODAY RELATED SIGNALS DETAILS
@@ -384,49 +374,46 @@ else:
 st.markdown("---")
 st.markdown("### 🔍 Today related signals details")
 
-if not show_signals:
-    st.info("📭 Today's signals details are no longer displayed after 10:00 PM. Come back tomorrow for new signals.")
+if not signals:
+    st.info("📭 No signal details available for today.")
 else:
-    if signals and isinstance(signals, list) and len(signals) > 0:
-        detail_data = []
-        for s in signals:
-            asset_type = s.get('type', 'STOCK')
-            if asset_type == 'ETF':
-                aum_m = s.get('aum_m', 0)
-                if aum_m >= 1000:
-                    cap_aum = f"{aum_m/1000:.1f}B$"
-                elif aum_m > 0:
-                    cap_aum = f"{aum_m:.1f}M$"
-                else:
-                    cap_aum = "N/A"
+    detail_data = []
+    for s in signals:
+        asset_type = s.get('type', 'STOCK')
+        if asset_type == 'ETF':
+            aum_m = s.get('aum_m', 0)
+            if aum_m >= 1000:
+                cap_aum = f"{aum_m/1000:.1f}B$"
+            elif aum_m > 0:
+                cap_aum = f"{aum_m:.1f}M$"
             else:
-                cap_aum = s.get('cap_category', 'N/A')
+                cap_aum = "N/A"
+        else:
+            cap_aum = s.get('cap_category', 'N/A')
 
-            detail_data.append({
-                "Score": s.get('score', 0),
-                "Cap./AUM": cap_aum,
-                "Gap": f"{s.get('gap', 0):.1f}%",
-                "Vol. ratio": f"{s.get('vol_ratio', 0):.1f}x",
-                "Market bias": s.get('market_bias', 'N/A'),
-                "Run time": s.get('timestamp', 'N/A')
-            })
+        detail_data.append({
+            "Score": s.get('score', 0),
+            "Cap./AUM": cap_aum,
+            "Gap": f"{s.get('gap', 0):.1f}%",
+            "Vol. ratio": f"{s.get('vol_ratio', 0):.1f}x",
+            "Market bias": s.get('market_bias', 'N/A'),
+            "Run time": s.get('timestamp', 'N/A')
+        })
 
-        df_detail = pd.DataFrame(detail_data)
-        st.dataframe(
-            df_detail,
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Score": st.column_config.NumberColumn("Score", width="small", alignment="left"),
-                "Cap./AUM": st.column_config.TextColumn("Cap./AUM", width="small"),
-                "Gap": st.column_config.TextColumn("Gap", width="small"),
-                "Vol. ratio": st.column_config.TextColumn("Vol. ratio", width="small"),
-                "Market bias": st.column_config.TextColumn("Market bias", width="medium"),
-                "Run time": st.column_config.TextColumn("Run time", width="medium")
-            }
-        )
-    else:
-        st.info("📭 No signal details available for today.")
+    df_detail = pd.DataFrame(detail_data)
+    st.dataframe(
+        df_detail,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Score": st.column_config.NumberColumn("Score", width="small", alignment="left"),
+            "Cap./AUM": st.column_config.TextColumn("Cap./AUM", width="small"),
+            "Gap": st.column_config.TextColumn("Gap", width="small"),
+            "Vol. ratio": st.column_config.TextColumn("Vol. ratio", width="small"),
+            "Market bias": st.column_config.TextColumn("Market bias", width="medium"),
+            "Run time": st.column_config.TextColumn("Run time", width="medium")
+        }
+    )
 
 # --- FOOTER ---
 st.markdown(
