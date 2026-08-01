@@ -241,19 +241,23 @@ with st.sidebar:
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ============================================================================
-# RÈGLE D'AFFICHAGE : PAS DE SIGNAUX APRÈS 22h00 (Montréal)
+# RÈGLE D'AFFICHAGE : PAS DE SIGNAUX APRÈS 22h00 DU LUNDI AU VENDREDI
 # ============================================================================
 now_mtl = datetime.now(MONTREAL_TZ)
 current_hour = now_mtl.hour
+current_weekday = now_mtl.weekday()  # 0=lundi, 6=dimanche
 today = now_mtl.strftime('%Y-%m-%d')
 
 signals_raw = fetch_signals()
 
-# Décision d'affichage avec messages distincts pour chaque section
-if current_hour >= 22:
+# Vérifier si on est en semaine (0-4) ET heure >= 22h
+is_weekday = current_weekday < 5  # lundi au vendredi
+is_after_10pm = current_hour >= 22
+
+if is_weekday and is_after_10pm:
     signals = []
-    display_message_setups = "📭 Setups are not displayed after 10:00 PM (Montreal time). Only new setups generated from the next successful run will appear here."
-    display_message_details = "📭 Signal details are not displayed after 10:00 PM (Montreal time). Only new signal details generated from the next trading day first run will appear here."
+    display_message_setups = "📭 Setups are not displayed after 10:00 PM (Montreal time) on weekdays. Only new setups generated from the next successful run will appear here."
+    display_message_details = "📭 Signal details are not displayed after 10:00 PM (Montreal time) on weekdays. Only new signal details generated from the next trading day first run will appear here."
 else:
     signals = [s for s in signals_raw if s.get('date') == today] if isinstance(signals_raw, list) else []
     display_message_setups = None
