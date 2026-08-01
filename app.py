@@ -157,35 +157,33 @@ def fetch_run_status():
     except:
         return None
 
-# --- FONCTION DE NETTOYAGE ---
-def clean_old_signals_github():
+# --- FONCTION DE NETTOYAGE COMPLET (vide le fichier) ---
+def clear_all_signals_github():
     token = st.secrets.get("GITHUB_TOKEN", "")
     if not token:
         return False
-    today = datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d')
     url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_PATH_SIGNALS}"
     headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
     try:
+        # Récupérer le SHA du fichier existant
         r = requests.get(url, headers=headers, timeout=5)
         if r.status_code == 404:
-            return False
+            # Le fichier n'existe pas, rien à faire
+            return True
         if r.status_code != 200:
             return False
         data = r.json()
-        content = base64.b64decode(data["content"]).decode("utf-8")
-        signals = json.loads(content)
-        if not isinstance(signals, list):
+        sha = data.get("sha")
+        if not sha:
             return False
-        cleaned = [s for s in signals if s.get('date') == today]
-        removed = len(signals) - len(cleaned)
-        if removed == 0:
-            return False
-        new_content = json.dumps(cleaned, indent=2)
-        encoded = base64.b64encode(new_content.encode()).decode()
+
+        # Écrire un fichier vide ([])
+        empty_content = json.dumps([], indent=2)
+        encoded = base64.b64encode(empty_content.encode()).decode()
         put_data = {
-            "message": f"Nettoyage automatique : {removed} signal(s) supprimé(s)",
+            "message": "Nettoyage complet des signaux (22h00)",
             "content": encoded,
-            "sha": data["sha"],
+            "sha": sha,
             "branch": "main"
         }
         r = requests.put(url, headers=headers, json=put_data, timeout=5)
@@ -247,13 +245,12 @@ else:
     st.caption("🔄 Auto‑refresh: 30s")
 
 # ============================================================
-# SYSTEM STATUS (pour la sidebar) – MODIFIÉ
+# SYSTEM STATUS (pour la sidebar)
 # ============================================================
 def get_system_status():
     run_status = fetch_run_status()
     if run_status and run_status.get("run_active", False):
         return "🟢", "Run in progress"
-    # Sinon, on affiche un message neutre
     return "🔵", "Idle until next run (auto/manual)"
 
 # --- SIDEBAR ---
@@ -285,39 +282,29 @@ signals_raw = fetch_signals()
 signals = [s for s in signals_raw if s.get('date') == today] if isinstance(signals_raw, list) else []
 
 # ============================================================================
-# NETTOYAGE PHYSIQUE AUTOMATIQUE À 22h00 (ET UNE SEULE FOIS PAR JOUR)
+# NETTOYAGE PHYSIQUE AUTOMATIQUE À 22h00 (VIDE COMPLET)
 # ============================================================================
 current_time = datetime.now(MONTREAL_TZ)
-# On initialise la variable de session pour le nettoyage à 22h00
+
 if "cleanup_done_today" not in st.session_state:
     st.session_state.cleanup_done_today = False
 
 # Si l'heure est entre 22:00 et 22:05 et que le nettoyage n'a pas encore été fait aujourd'hui
 if current_time.hour == 22 and 0 <= current_time.minute <= 5 and not st.session_state.cleanup_done_today:
     with st.spinner("🧹 Nettoyage physique automatique des signaux (22h00)..."):
-        success = clean_old_signals_github()
+        success = clear_all_signals_github()
         if success:
             st.session_state.cleanup_done_today = True
-            st.success("✅ Nettoyage automatique effectué avec succès.")
+            # Forcer le rafraîchissement des données
+            st.cache_data.clear()
+            st.success("✅ Nettoyage automatique effectué avec succès. Les tableaux ont été vidés.")
+            st.rerun()
         else:
-            st.warning("⚠️ Aucun signal ancien à nettoyer ou erreur.")
+            st.warning("⚠️ Erreur lors du nettoyage automatique.")
 
-# Si on a dépassé 22h05, on remet le flag à False pour le lendemain (pour éviter qu'il reste bloqué)
+# Si on a dépassé 22h05, on remet le flag à False pour le lendemain
 if current_time.hour != 22 and st.session_state.cleanup_done_today:
     st.session_state.cleanup_done_today = False
-
-# ============================================================================
-# NETTOYAGE SYSTÉMATIQUE AU CHARGEMENT (une fois par session, en complément)
-# ============================================================================
-if "cleaned_today" not in st.session_state:
-    st.session_state.cleaned_today = False
-
-if not st.session_state.cleaned_today and signals:
-    with st.spinner("🧹 Vérification et nettoyage des signaux..."):
-        has_old = any(s.get('date') != today for s in signals_raw)
-        if has_old:
-            clean_old_signals_github()
-        st.session_state.cleaned_today = True
 
 # ============================================================================
 # TODAY VALIDATED SETUPS
