@@ -246,29 +246,15 @@ else:
     st.info("🔹 No run in progress. Auto-refreshes every 30s to detect new signals.")
     st.caption("🔄 Auto‑refresh: 30s")
 
-# --- SYSTEM STATUS (pour la sidebar) ---
+# ============================================================
+# SYSTEM STATUS (pour la sidebar) – MODIFIÉ
+# ============================================================
 def get_system_status():
     run_status = fetch_run_status()
     if run_status and run_status.get("run_active", False):
         return "🟢", "Run in progress"
-    now = datetime.now(MONTREAL_TZ)
-    run_times = [
-        now.replace(hour=10, minute=0, second=0, microsecond=0),
-        now.replace(hour=10, minute=30, second=0, microsecond=0),
-        now.replace(hour=14, minute=55, second=0, microsecond=0),
-        now.replace(hour=15, minute=55, second=0, microsecond=0)
-    ]
-    next_run = None
-    for rt in run_times:
-        if rt > now:
-            next_run = rt
-            break
-    if next_run is None:
-        next_run = run_times[0] + timedelta(days=1)
-    delta_next = next_run - now
-    hours = delta_next.seconds // 3600
-    minutes = (delta_next.seconds % 3600) // 60
-    return "🔵", f"Next run in {hours}h {minutes:02d}min"
+    # Sinon, on affiche un message neutre
+    return "🔵", "Idle until next run (auto/manual)"
 
 # --- SIDEBAR ---
 with st.sidebar:
@@ -299,14 +285,35 @@ signals_raw = fetch_signals()
 signals = [s for s in signals_raw if s.get('date') == today] if isinstance(signals_raw, list) else []
 
 # ============================================================================
-# NETTOYAGE SYSTÉMATIQUE AU CHARGEMENT (une fois par jour)
+# NETTOYAGE PHYSIQUE AUTOMATIQUE À 22h00 (ET UNE SEULE FOIS PAR JOUR)
+# ============================================================================
+current_time = datetime.now(MONTREAL_TZ)
+# On initialise la variable de session pour le nettoyage à 22h00
+if "cleanup_done_today" not in st.session_state:
+    st.session_state.cleanup_done_today = False
+
+# Si l'heure est entre 22:00 et 22:05 et que le nettoyage n'a pas encore été fait aujourd'hui
+if current_time.hour == 22 and 0 <= current_time.minute <= 5 and not st.session_state.cleanup_done_today:
+    with st.spinner("🧹 Nettoyage physique automatique des signaux (22h00)..."):
+        success = clean_old_signals_github()
+        if success:
+            st.session_state.cleanup_done_today = True
+            st.success("✅ Nettoyage automatique effectué avec succès.")
+        else:
+            st.warning("⚠️ Aucun signal ancien à nettoyer ou erreur.")
+
+# Si on a dépassé 22h05, on remet le flag à False pour le lendemain (pour éviter qu'il reste bloqué)
+if current_time.hour != 22 and st.session_state.cleanup_done_today:
+    st.session_state.cleanup_done_today = False
+
+# ============================================================================
+# NETTOYAGE SYSTÉMATIQUE AU CHARGEMENT (une fois par session, en complément)
 # ============================================================================
 if "cleaned_today" not in st.session_state:
     st.session_state.cleaned_today = False
 
 if not st.session_state.cleaned_today and signals:
     with st.spinner("🧹 Vérification et nettoyage des signaux..."):
-        # On vérifie s'il y a des signaux anciens dans le fichier distant
         has_old = any(s.get('date') != today for s in signals_raw)
         if has_old:
             clean_old_signals_github()
@@ -331,7 +338,7 @@ else:
         trailing_price = s.get('trailing_price', 0)
         trail_pct = s.get('trail_percent', 0)
 
-        # Fallback pour les anciens signaux (si les niveaux ne sont pas stockés)
+        # Fallback pour les anciens signaux
         if tp_price == 0 and entry > 0:
             tp_mult = s.get('tp_mult', 0)
             sl_mult = s.get('sl_mult', 0)
