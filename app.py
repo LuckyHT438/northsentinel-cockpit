@@ -243,18 +243,17 @@ with st.sidebar:
 # ============================================================================
 # RÈGLE D'AFFICHAGE : PAS DE SIGNAUX APRÈS 22h00 (Montréal)
 # ============================================================================
-current_hour = datetime.now(MONTREAL_TZ).hour
-today = datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d')
+now_mtl = datetime.now(MONTREAL_TZ)
+current_hour = now_mtl.hour
+today = now_mtl.strftime('%Y-%m-%d')
 
-# Récupérer les signaux bruts
 signals_raw = fetch_signals()
 
-# Si l'heure est >= 22h, on ignore tous les signaux (même ceux du jour)
+# Décision d'affichage
 if current_hour >= 22:
     signals = []
-    display_message = "📭 No signals displayed after 10:00 PM (Montreal time). Today's signals are archived and will reappear tomorrow after the first run."
+    display_message = "📭 Signals are not displayed after 10:00 PM (Montreal time). Only new signals generated tomorrow, starting from the first run, will appear in this table. Today's signals are archived and will not be redisplayed."
 else:
-    # Sinon, on filtre par date du jour
     signals = [s for s in signals_raw if s.get('date') == today] if isinstance(signals_raw, list) else []
     display_message = None
 
@@ -267,7 +266,7 @@ if not signals:
     if display_message:
         st.info(display_message)
     else:
-        st.info("No signals found for today. Signals will appear after the first scheduled run.")
+        st.info("No validated setup, so far. Until the next successful run.")
     st.caption("💡 The interface refreshes automatically every 30 seconds.")
 else:
     data_latest = []
@@ -280,7 +279,7 @@ else:
         trailing_price = s.get('trailing_price', 0)
         trail_pct = s.get('trail_percent', 0)
 
-        # Fallback pour les anciens signaux
+        # Fallback pour les anciens signaux (si les niveaux ne sont pas stockés)
         if tp_price == 0 and entry > 0:
             tp_mult = s.get('tp_mult', 0)
             sl_mult = s.get('sl_mult', 0)
@@ -327,7 +326,7 @@ if not signals:
     if display_message:
         st.info(display_message)
     else:
-        st.info("📭 No signal details available for today.")
+        st.info("📭 No signal details available yet.")
 else:
     detail_data = []
     for s in signals:
