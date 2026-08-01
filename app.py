@@ -157,40 +157,6 @@ def fetch_run_status():
     except:
         return None
 
-# --- FONCTION DE NETTOYAGE COMPLET (vide le fichier) ---
-def clear_all_signals_github():
-    token = st.secrets.get("GITHUB_TOKEN", "")
-    if not token:
-        return False
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_PATH_SIGNALS}"
-    headers = {"Authorization": f"token {token}", "Accept": "application/vnd.github.v3+json"}
-    try:
-        # Récupérer le SHA du fichier existant
-        r = requests.get(url, headers=headers, timeout=5)
-        if r.status_code == 404:
-            # Le fichier n'existe pas, rien à faire
-            return True
-        if r.status_code != 200:
-            return False
-        data = r.json()
-        sha = data.get("sha")
-        if not sha:
-            return False
-
-        # Écrire un fichier vide ([])
-        empty_content = json.dumps([], indent=2)
-        encoded = base64.b64encode(empty_content.encode()).decode()
-        put_data = {
-            "message": "Nettoyage complet des signaux (22h00)",
-            "content": encoded,
-            "sha": sha,
-            "branch": "main"
-        }
-        r = requests.put(url, headers=headers, json=put_data, timeout=5)
-        return r.status_code == 200
-    except:
-        return False
-
 # --- AUTO-REFRESH ---
 run_status = fetch_run_status()
 run_active = run_status and run_status.get("run_active", False)
@@ -275,36 +241,22 @@ with st.sidebar:
     st.caption(f"Session started – {datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d %H:%M:%S')}")
 
 # ============================================================================
-# FILTRAGE DES SIGNAUX PAR DATE (aujourd'hui uniquement)
+# RÈGLE D'AFFICHAGE : PAS DE SIGNAUX APRÈS 22h00 (Montréal)
 # ============================================================================
+current_hour = datetime.now(MONTREAL_TZ).hour
 today = datetime.now(MONTREAL_TZ).strftime('%Y-%m-%d')
+
+# Récupérer les signaux bruts
 signals_raw = fetch_signals()
-signals = [s for s in signals_raw if s.get('date') == today] if isinstance(signals_raw, list) else []
 
-# ============================================================================
-# NETTOYAGE PHYSIQUE AUTOMATIQUE À 22h00 (VIDE COMPLET)
-# ============================================================================
-current_time = datetime.now(MONTREAL_TZ)
-
-if "cleanup_done_today" not in st.session_state:
-    st.session_state.cleanup_done_today = False
-
-# Si l'heure est entre 22:00 et 22:05 et que le nettoyage n'a pas encore été fait aujourd'hui
-if current_time.hour == 22 and 0 <= current_time.minute <= 5 and not st.session_state.cleanup_done_today:
-    with st.spinner("🧹 Nettoyage physique automatique des signaux (22h00)..."):
-        success = clear_all_signals_github()
-        if success:
-            st.session_state.cleanup_done_today = True
-            # Forcer le rafraîchissement des données
-            st.cache_data.clear()
-            st.success("✅ Nettoyage automatique effectué avec succès. Les tableaux ont été vidés.")
-            st.rerun()
-        else:
-            st.warning("⚠️ Erreur lors du nettoyage automatique.")
-
-# Si on a dépassé 22h05, on remet le flag à False pour le lendemain
-if current_time.hour != 22 and st.session_state.cleanup_done_today:
-    st.session_state.cleanup_done_today = False
+# Si l'heure est >= 22h, on ignore tous les signaux (même ceux du jour)
+if current_hour >= 22:
+    signals = []
+    display_message = "📭 No signals displayed after 10:00 PM (Montreal time). Today's signals are archived and will reappear tomorrow after the first run."
+else:
+    # Sinon, on filtre par date du jour
+    signals = [s for s in signals_raw if s.get('date') == today] if isinstance(signals_raw, list) else []
+    display_message = None
 
 # ============================================================================
 # TODAY VALIDATED SETUPS
@@ -312,7 +264,10 @@ if current_time.hour != 22 and st.session_state.cleanup_done_today:
 st.markdown("### 📋 Today validated setups")
 
 if not signals:
-    st.info("No signals found for today. Signals will appear after the first scheduled run.")
+    if display_message:
+        st.info(display_message)
+    else:
+        st.info("No signals found for today. Signals will appear after the first scheduled run.")
     st.caption("💡 The interface refreshes automatically every 30 seconds.")
 else:
     data_latest = []
@@ -369,7 +324,10 @@ st.markdown("---")
 st.markdown("### 🔍 Today related signals details")
 
 if not signals:
-    st.info("📭 No signal details available for today.")
+    if display_message:
+        st.info(display_message)
+    else:
+        st.info("📭 No signal details available for today.")
 else:
     detail_data = []
     for s in signals:
