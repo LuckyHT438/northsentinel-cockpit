@@ -249,13 +249,15 @@ today = now_mtl.strftime('%Y-%m-%d')
 
 signals_raw = fetch_signals()
 
-# Décision d'affichage
+# Décision d'affichage avec messages distincts pour chaque section
 if current_hour >= 22:
     signals = []
-    display_message = "📭 Setups are not displayed after 10:00 PM (Montreal time). Only new setups generated, starting from the next run, will appear in this section."
+    display_message_setups = "📭 Setups are not displayed after 10:00 PM (Montreal time). Only new setups generated from the next successful run will appear here."
+    display_message_details = "📭 Signal details are not displayed after 10:00 PM (Montreal time). Only new signal details generated from the next trading day first run will appear here."
 else:
     signals = [s for s in signals_raw if s.get('date') == today] if isinstance(signals_raw, list) else []
-    display_message = None
+    display_message_setups = None
+    display_message_details = None
 
 # ============================================================================
 # TODAY VALIDATED SETUPS
@@ -263,10 +265,10 @@ else:
 st.markdown("### 📋 Today validated setups")
 
 if not signals:
-    if display_message:
-        st.info(display_message)
+    if display_message_setups:
+        st.info(display_message_setups)
     else:
-        st.info("No validated setup, so far. Until the next successful run.")
+        st.info("No validated setups, so far. Setups will appear after the first successful auto/manual run.")
     st.caption("💡 The interface refreshes automatically every 30 seconds.")
 else:
     data_latest = []
@@ -323,10 +325,10 @@ st.markdown("---")
 st.markdown("### 🔍 Today related signals details")
 
 if not signals:
-    if display_message:
-        st.info(display_message)
+    if display_message_details:
+        st.info(display_message_details)
     else:
-        st.info("📭 No signal details available yet.")
+        st.info("📭 No signal details available yet. They will appear after the first successful auto/manual run.")
 else:
     detail_data = []
     for s in signals:
