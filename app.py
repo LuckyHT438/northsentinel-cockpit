@@ -252,7 +252,7 @@ signals_raw = fetch_signals()
 # Décision d'affichage
 if current_hour >= 22:
     signals = []
-    display_message = "📭 Setups are not displayed after 10:00 PM (Montreal time). Only new setupls generated, starting from the next run, will appear in this section."
+    display_message = "📭 Setups are not displayed after 10:00 PM (Montreal time). Only new setups generated, starting from the next run, will appear in this section."
 else:
     signals = [s for s in signals_raw if s.get('date') == today] if isinstance(signals_raw, list) else []
     display_message = None
