@@ -272,7 +272,7 @@ if not signals:
     if display_message_setups:
         st.info(display_message_setups)
     else:
-        st.info("No validated setups, so far. Setups will appear after the first successful auto/manual run.")
+        st.info("📭 No validated setups, so far. Setups will appear after the first successful auto/manual run.")
     st.caption("💡 The interface refreshes automatically every 30 seconds.")
 else:
     data_latest = []
