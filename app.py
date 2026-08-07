@@ -272,7 +272,7 @@ if not signals:
     if display_message_setups:
         st.info(display_message_setups)
     else:
-        st.info("📭 No validated setups, so far. Setups will appear after the first successful auto/manual run.")
+        st.info("📭 No validated setups, so far. Setups will be displayed here only if they meet the system's criteria and thresholds.")
     st.caption("💡 The interface refreshes automatically every 30 seconds.")
 else:
     data_latest = []
@@ -323,16 +323,16 @@ else:
     )
 
 # ============================================================================
-# TODAY RELATED SIGNALS DETAILS
+# CONTEXT DETAILS PER SETUP
 # ============================================================================
 st.markdown("---")
-st.markdown("### 🔍 Today related signals details")
+st.markdown("### 🔍 Context details per setup")
 
 if not signals:
     if display_message_details:
         st.info(display_message_details)
     else:
-        st.info("📭 No signal details available yet. They will appear after the first successful auto/manual run.")
+        st.info("📭 No context details available yet. They will be displayed only when the system has validated some setups.")
 else:
     detail_data = []
     for s in signals:
