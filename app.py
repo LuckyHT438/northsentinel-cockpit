@@ -257,7 +257,7 @@ is_after_10pm = current_hour >= 22
 if is_weekday and is_after_10pm:
     signals = []
     display_message_setups = "📭 Setups are not displayed after 10:00 PM (Montreal time) on weekdays. Only new setups generated from the next successful run will appear here."
-    display_message_details = "📭 Signal details are not displayed after 10:00 PM (Montreal time) on weekdays. Only new signal details generated from the next trading day first run will appear here."
+    display_message_details = "📭 Setups context details are not displayed after 10:00 PM (Montreal time) on weekdays. Only new setups details generated from the next trading day runs will appear here."
 else:
     signals = [s for s in signals_raw if s.get('date') == today] if isinstance(signals_raw, list) else []
     display_message_setups = None
@@ -332,7 +332,7 @@ if not signals:
     if display_message_details:
         st.info(display_message_details)
     else:
-        st.info("📭 No context details available yet. They will be displayed only when the system has validated some setups.")
+        st.info("📭 No context details available yet. They will be displayed here only when the system has validated some setups.")
 else:
     detail_data = []
     for s in signals:
